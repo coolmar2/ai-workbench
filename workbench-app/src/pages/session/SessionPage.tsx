@@ -32,6 +32,7 @@ import { SAMPLE_SESSIONS } from '../mission/data'
 import { useIdentity } from '../../context/identity'
 import type { McSession, TranscriptRow, Vendor } from '../../data/types'
 import { sessionTitle, useMissionFeed, workspaceName } from '../../live/mission'
+import { sendPrompt } from '../../live/actions'
 import { AgentCloud } from './Cloud'
 import { AgentPanel, type Tab } from './Panel'
 import {
@@ -114,6 +115,7 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
   const [panelTab, setPanelTab] = useState<Tab>('run')
   const [inset, setInset] = useState(150)
   const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
   const cancelRename = useRef(false)
 
   const sample = sampleSession(id)
@@ -287,12 +289,31 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
   const chatEl = <Transcript rows={rows} vendorOf={(n) => nodeByName(n)?.vendor} onAsk={setAsk} onOpenAgent={openAgent} bottomInset={inset} />
 
   const agentCount = agentNodes.length
+  // Only a live session with a running terminal wrapper can take a prompt.
+  const sendPort = live && live.online && live.port != null ? live.port : null
+  const sendBlocked = !live
+    ? 'Sample session: nothing to send to'
+    : sendPort == null
+      ? 'No terminal wrapper is running for this session'
+      : sending
+        ? 'Sending…'
+        : undefined
+  const submit = async (text: string) => {
+    if (sendPort == null || sending) return
+    setSending(true)
+    const r = await sendPrompt(sendPort, text)
+    setSending(false)
+    if (r.ok) {
+      setDraft('')
+      toast.success('Sent to the lead')
+    } else toast.error(`Not sent: ${r.error ?? 'unknown error'}`)
+  }
   const composer = (
     <Composer
       value={draft}
       onChange={setDraft}
-      onSubmit={() => undefined}
-      disabledReason="Sending from the workbench comes later"
+      onSubmit={submit}
+      disabledReason={sendBlocked}
       placeholder="Queue another message for the lead…"
       models={[{ value: 'lead', label: live ? leadModel : `${leadModel} Medium`, icon: <AgentMark vendor="claude" size={10} /> }]}
       model="lead"

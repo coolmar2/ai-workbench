@@ -3,8 +3,9 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Folder, MessageSquare, PanelLeft, Plus, Radio, WifiOff } from 'lucide-react'
 import { useIdentity } from '../../context/identity'
 import { PageActions } from '../../components/shell/PageActions'
-import { Badge, Button, EmptyState, IconButton, ScrollArea, Sheet, SheetContent, Skeleton, useMediaQuery } from '../../components/ui'
+import { Badge, Button, ConfirmDialog, EmptyState, IconButton, ScrollArea, Sheet, SheetContent, Skeleton, toast, useMediaQuery } from '../../components/ui'
 import { useMissionFeed } from '../../live/mission'
+import { startSession } from '../../live/actions'
 import { CoordinatorPanel } from './CoordinatorPanel'
 import { Hub, MoreList, type CoordinatorInfo } from './Hub'
 import { WorkspaceRail } from './Rail'
@@ -145,12 +146,7 @@ export default function MissionPage() {
           </div>
           <div className="min-w-0 flex-1 text-right min-[1100px]:text-center">{summary}</div>
           {midVp && <IconButton label="Coordinator feed" icon={<MessageSquare />} onClick={() => setFeedOpen(true)} />}
-          <Button size="md" variant="primary" asChild>
-            <Link to="/agent">
-              <Plus aria-hidden className="size-3.5" />
-              New session in {ws.name}
-            </Link>
-          </Button>
+          <NewSessionButton ws={ws} live={live} size="md" variant="primary" />
         </header>
 
         <ScrollArea className="min-h-0 flex-1">
@@ -181,11 +177,7 @@ export default function MissionPage() {
               icon={<Folder />}
               title={ws.placeholder ? 'Sample workspace, no sessions to show' : 'No running sessions'}
               hint={ws.placeholder ? 'Only the first sample workspace has sessions.' : 'Sessions appear here as soon as one starts.'}
-              action={
-                <Button asChild icon={<Plus />}>
-                  <Link to="/agent">New session in {ws.name}</Link>
-                </Button>
-              }
+              action={<NewSessionButton ws={ws} live={live} />}
             />
           ) : (
             <EmptyState icon={<Folder />} title="Nothing running here" hint="Only ended sessions, listed below." />
@@ -211,5 +203,51 @@ export default function MissionPage() {
         </SheetContent>
       </Sheet>
     </div>
+  )
+}
+
+/**
+ * "New session in <workspace>". For a live workspace it asks, then starts claude (through the terminal
+ * wrapper, in a new console window) in the workspace folder via POST /start. Sample workspaces have no
+ * real folder, so they keep linking to the Agent page.
+ */
+function NewSessionButton({ ws, live, size, variant }: { ws: Workspace; live: boolean; size?: 'md'; variant?: 'primary' }) {
+  const [confirm, setConfirm] = useState(false)
+  const [starting, setStarting] = useState(false)
+  const label = `New session in ${ws.name}`
+
+  if (!live || !ws.path) {
+    return (
+      <Button size={size} variant={variant} asChild>
+        <Link to="/agent">
+          <Plus aria-hidden className="size-3.5" />
+          {label}
+        </Link>
+      </Button>
+    )
+  }
+
+  const start = async () => {
+    setStarting(true)
+    const r = await startSession(ws.path)
+    setStarting(false)
+    if (r.ok) toast.success(`Started claude in ${ws.name}`, { description: 'It opens in a new terminal window and shows up here once it starts.' })
+    else toast.error(`Could not start: ${r.error ?? 'unknown error'}`)
+  }
+
+  return (
+    <>
+      <Button size={size} variant={variant} icon={<Plus />} disabled={starting} onClick={() => setConfirm(true)}>
+        {starting ? 'Starting…' : label}
+      </Button>
+      <ConfirmDialog
+        open={confirm}
+        onOpenChange={setConfirm}
+        title={label}
+        description={`Start a new claude session in ${ws.path}? It opens in its own terminal window.`}
+        confirmLabel="Start session"
+        onConfirm={start}
+      />
+    </>
   )
 }
