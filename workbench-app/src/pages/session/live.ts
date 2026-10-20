@@ -16,9 +16,6 @@ export interface LiveGraph {
   canvas: { w: number; h: number }
 }
 
-function workModelOf(v: ReturnType<typeof vendorOfModel>): string | undefined {
-  return v === 'codex' ? 'Sonnet 5.5' : v === 'gemini' ? 'Haiku 5.5' : undefined
-}
 
 /** The lead's model label, or "Model not reported". Never guessed from sub-agents (shared rule in live/verdict). */
 export function leadModelLabel(s: McSession): string {
@@ -72,7 +69,6 @@ export function liveGraph(s: McSession): LiveGraph {
         name: agentName(a),
         vendor,
         model: modelLabel(a.model),
-        workModel: workModelOf(vendor),
         pct: done ? 100 : pctOf(plannedOf(a)),
         ringText: done ? '✓' : pctOf(plannedOf(a)) === null ? '…' : `${pctOf(plannedOf(a))}%`,
         ringFont: done ? 18 : 14,
@@ -127,7 +123,6 @@ export function liveDetails(s: McSession, now: number): Record<string, Detail> {
       name: agentName(a),
       vendor,
       model: modelLabel(a.model),
-      workModel: workModelOf(vendor),
       state: a.state,
       subtitle: `reports to ${a.parent_agent_id ? 'its parent agent' : 'Lead'} · select another agent in the graph to switch`,
       bigText: done ? '100%' : pctOf(plannedOf(a)) === null ? 'Running' : `${pctOf(plannedOf(a))}%`,

@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { Folder, MessageSquare, PanelLeft, Plus, Radio, WifiOff } from 'lucide-react'
 import { useIdentity } from '../../context/identity'
 import { PageActions } from '../../components/shell/PageActions'
-import { Badge, Button, ConfirmDialog, EmptyState, IconButton, ScrollArea, Sheet, SheetContent, Skeleton, toast, useMediaQuery } from '../../components/ui'
+import { Badge, Button, EmptyState, IconButton, ScrollArea, Sheet, SheetContent, Skeleton, useMediaQuery } from '../../components/ui'
 import { useMissionFeed } from '../../live/mission'
-import { startSession } from '../../live/actions'
+import { useStartSession } from '../../components/shell/StartSession'
 import { CoordinatorPanel } from './CoordinatorPanel'
 import { Hub, MoreList, type CoordinatorInfo } from './Hub'
 import { WorkspaceRail } from './Rail'
@@ -14,7 +14,7 @@ import { clock12, liveWorkspaces, sampleWorkspaces, summarize, type Workspace } 
 export default function MissionPage() {
   const feed = useMissionFeed()
   const { isWork } = useIdentity()
-  const navigate = useNavigate()
+  const startSession = useStartSession()
   // `?sample=1` forces the design sample data even when the feed answers (screenshots, demos).
   const FORCE_SAMPLE = useSearchParams()[0].has('sample')
   const [t0] = useState(() => Date.now())
@@ -81,8 +81,8 @@ export default function MissionPage() {
           title="No sessions yet"
           hint="The feed is up. Sessions appear here as soon as one starts."
           action={
-            <Button asChild icon={<Plus />}>
-              <Link to="/agent">New session</Link>
+            <Button icon={<Plus />} onClick={() => startSession.open()}>
+              New session
             </Button>
           }
         />
@@ -99,7 +99,7 @@ export default function MissionPage() {
       workspaces={workspaces}
       selected={ws.name}
       onSelect={(n) => setSel(n)}
-      onNewWorkspace={() => navigate('/agent')}
+      onNewWorkspace={() => startSession.open()}
       onNavigate={close}
       className="h-full"
     />
@@ -207,47 +207,14 @@ export default function MissionPage() {
 }
 
 /**
- * "New session in <workspace>". For a live workspace it asks, then starts claude (through the terminal
- * wrapper, in a new console window) in the workspace folder via POST /start. Sample workspaces have no
- * real folder, so they keep linking to the Agent page.
+ * "New session in <workspace>": opens the app's Start-session dialog, prefilled with the workspace folder
+ * for a live workspace (sample workspaces have no real folder, so it opens empty).
  */
 function NewSessionButton({ ws, live, size, variant }: { ws: Workspace; live: boolean; size?: 'md'; variant?: 'primary' }) {
-  const [confirm, setConfirm] = useState(false)
-  const [starting, setStarting] = useState(false)
-  const label = `New session in ${ws.name}`
-
-  if (!live || !ws.path) {
-    return (
-      <Button size={size} variant={variant} asChild>
-        <Link to="/agent">
-          <Plus aria-hidden className="size-3.5" />
-          {label}
-        </Link>
-      </Button>
-    )
-  }
-
-  const start = async () => {
-    setStarting(true)
-    const r = await startSession(ws.path)
-    setStarting(false)
-    if (r.ok) toast.success(`Started claude in ${ws.name}`, { description: 'It opens in a new terminal window and shows up here once it starts.' })
-    else toast.error(`Could not start: ${r.error ?? 'unknown error'}`)
-  }
-
+  const { open } = useStartSession()
   return (
-    <>
-      <Button size={size} variant={variant} icon={<Plus />} disabled={starting} onClick={() => setConfirm(true)}>
-        {starting ? 'Starting…' : label}
-      </Button>
-      <ConfirmDialog
-        open={confirm}
-        onOpenChange={setConfirm}
-        title={label}
-        description={`Start a new claude session in ${ws.path}? It opens in its own terminal window.`}
-        confirmLabel="Start session"
-        onConfirm={start}
-      />
-    </>
+    <Button size={size} variant={variant} icon={<Plus />} onClick={() => open(live && ws.path ? ws.path : undefined)}>
+      New session in {ws.name}
+    </Button>
   )
 }

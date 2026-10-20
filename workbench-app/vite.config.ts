@@ -14,7 +14,7 @@ const isLoopback = (a?: string) => a === '127.0.0.1' || a === '::1' || a === '::
 //  - read endpoints are GET-only;
 //  - POST /send and /start (they type into / start claude) are proxied only for a caller on this machine
 //    whose Origin is this app, with a JSON body. Anything else is refused here, before wb_mc sees it.
-//  - /term is not proxied.
+//  - GET /term (live terminal stream) only for a caller on this computer, never cross-site.
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   build: {
@@ -49,6 +49,26 @@ export default defineConfig({
             res.end('read-only')
             return false
           }
+        },
+      },
+      // Live terminal output of a session (SSE). Same-origin EventSource GETs carry no Origin header, so:
+      // caller must be on this computer, and the browser must not label it cross-site (Sec-Fetch-Site).
+      '^/api/mc/term\\?port=\\d+$': {
+        target: MC_TARGET,
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api\/mc/, ''),
+        bypass: (req, res) => {
+          if (!res) return
+          const refuse = (code: number, error: string) => {
+            res.statusCode = code
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify({ error }))
+            return false as const
+          }
+          if (req.method !== 'GET') return refuse(405, 'GET only')
+          if (!isLoopback(req.socket.remoteAddress)) return refuse(403, 'only from this computer')
+          const site = req.headers['sec-fetch-site']
+          if (site && site !== 'same-origin' && site !== 'none') return refuse(403, 'cross-site')
         },
       },
       // Actions: type a prompt into a running session, or start a new one. Local, same-origin JSON POSTs only.

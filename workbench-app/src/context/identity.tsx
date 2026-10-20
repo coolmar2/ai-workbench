@@ -52,7 +52,7 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       setIdentity,
       vendors: isWork ? ['claude'] : ['claude', 'codex', 'gemini'],
       vendorFor: (v) => (isWork ? 'claude' : v),
-      orgLabel: 'Acme Corp · Claude only',
+      orgLabel: 'Work · not set up on this PC',
       accountLabel: isWork ? 'Work account not set up on this PC' : personalLabel(acc),
     }
   }, [identity, setIdentity, acc])

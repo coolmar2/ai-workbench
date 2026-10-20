@@ -1,261 +1,295 @@
-import { useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
-import { Check, Circle, ExternalLink, PanelRight, PanelRightClose, SquarePen } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
+import { Check, Circle, ExternalLink, Loader2, PanelRight, PanelRightClose, Play, SearchX, SquarePen, UserX } from 'lucide-react'
 import { useIdentity } from '../../context/identity'
 import { useAccounts } from '../../live/accounts'
+import { sendPrompt } from '../../live/actions'
+import { agentName, modelLabel, sessionTitle, useMissionFeed, vendorOfModel, workspaceName } from '../../live/mission'
+import type { McSession, TranscriptRow } from '../../data/types'
 import { PageActions } from '../../components/shell/PageActions'
+import { sameFolder, useStartSession } from '../../components/shell/StartSession'
 import {
-  AgentMark, Badge, Button, Card, Composer, IconButton, PageHeader, Popover, PopoverContent, PopoverTrigger, ScrollArea, StatusDot,
-  TranscriptAssistantText, TranscriptToolRow, TranscriptUserBlock, Tooltip, cn,
+  AgentMark, Badge, Button, Composer, EmptyState, IconButton, ListRow, PageHeader, Popover, PopoverContent, PopoverTrigger, ScrollArea,
+  Skeleton, StatusDot, cn, toStatus, toast,
 } from '../../components/ui'
-import {
-  type AgAccount, CHAT_TITLE, CHAT_WORKSPACE, DECISION_TEXT, LEAD_LABEL, LIVE, LIVE_WORK, MODELS, PLAN, PLAN_WORK,
-  SESSION_LINK, SUGGESTIONS, TOOL_CALLS, USER_PROMPT,
-} from './data'
+import { leadModelLabel, liveRows } from '../session/live'
+import { plannedOf, useActivity, type Todo } from '../session/plan'
+import { Transcript } from '../session/transcript/Transcript'
+import type { AgAccount } from './data'
 
 type Vendor = 'claude' | 'codex' | 'gemini'
 const VENDOR_NAME: Record<Vendor, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' }
-/** Sample progress for the plan checklist, by row index. */
-const PLAN_STATE = ['running', 'running', 'done', 'pending'] as const
 
-function PlanIcon({ state }: { state: (typeof PLAN_STATE)[number] }) {
-  if (state === 'done') return <Check className="size-3.5 text-success" aria-label="Done" />
-  if (state === 'running') return <StatusDot status="running" />
+interface Pending {
+  folder: string
+  at: number
+  /** Session ids that already existed when the start finished; the new one is not among them. */
+  known: Set<string>
+}
+
+function TodoIcon({ status }: { status: string }) {
+  if (status === 'completed') return <Check className="size-3.5 text-success" aria-label="Done" />
+  if (status === 'in_progress') return <StatusDot status="running" />
   return <Circle className="size-3.5 text-4" aria-label="Pending" />
+}
+
+/** Online sessions first, then newest event first. */
+function byRecent(list: McSession[]): McSession[] {
+  return [...list].sort((a, b) => Number(b.online) - Number(a.online) || (b.last_event_t || '').localeCompare(a.last_event_t || ''))
 }
 
 export default function AgentPage() {
   const { isWork } = useIdentity()
-  const [started, setStarted] = useState(true)
+  const feed = useMissionFeed()
+  const startDialog = useStartSession()
+  const [params, setParams] = useSearchParams()
+  const [pending, setPending] = useState<Pending | null>(null)
   const [railOpen, setRailOpen] = useState(true)
-  const [draft, setDraft] = useState('')
-  const [composerH, setComposerH] = useState(96)
-
-  const plan = isWork ? PLAN_WORK : PLAN
-  const live = isWork ? LIVE_WORK : LIVE
   const acc = useAccounts()
-  const accounts: AgAccount[] = isWork
-    ? [{ vendor: 'claude', name: 'Claude Code', how: 'Work account not set up on this PC' }]
-    : acc.accounts
-      ? acc.accounts.map((a) => ({ vendor: a.vendor, name: a.name, how: a.signed_in ? `Signed in · ${a.detail}` : a.detail }))
-      : [{ vendor: 'claude', name: 'Accounts', how: acc.offline ? 'wb_mc.py is not answering' : 'Checking…' }]
-  const rail = <RailContent plan={plan} live={live} accounts={accounts} />
 
-  return (
-    <>
-      <PageActions>
-        <IconButton label="New chat" icon={<SquarePen />} tooltipSide="bottom" onClick={() => { setStarted(false); setDraft('') }} />
-        <IconButton
-          label={railOpen ? 'Hide side rail' : 'Show side rail'}
-          icon={railOpen ? <PanelRightClose /> : <PanelRight />}
-          tooltipSide="bottom"
-          className="max-lg:hidden"
-          onClick={() => setRailOpen((o) => !o)}
+  const feedRef = useRef(feed)
+  useEffect(() => {
+    feedRef.current = feed
+  }, [feed])
+
+  const paramId = params.get('session')
+  const sessions = feed.state?.sessions
+  const arrived = useMemo(
+    () => (pending ? sessions?.find((s) => !pending.known.has(s.session_id) && sameFolder(s.cwd, pending.folder)) : undefined),
+    [pending, sessions],
+  )
+  const chosenId = paramId ?? arrived?.session_id ?? null
+
+  // Keep the chosen session in the URL so a reload keeps it.
+  useEffect(() => {
+    if (!paramId && arrived) setParams({ session: arrived.session_id }, { replace: true })
+  }, [paramId, arrived, setParams])
+
+  const select = (id: string | null) => {
+    setPending(null)
+    setParams(id ? { session: id } : {}, { replace: false })
+  }
+  const startNew = () =>
+    startDialog.open(undefined, (info) => {
+      const known = new Set((feedRef.current.state?.sessions ?? []).map((s) => s.session_id))
+      setPending({ folder: info.folder, at: info.at, known })
+      setParams({}, { replace: false })
+    })
+
+  const session = chosenId ? sessions?.find((s) => s.session_id === chosenId) : undefined
+
+  const accounts: AgAccount[] = acc.accounts
+    ? acc.accounts.map((a) => ({ vendor: a.vendor, name: a.name, how: a.signed_in ? `Signed in · ${a.detail}` : a.detail }))
+    : [{ vendor: 'claude', name: 'Accounts', how: acc.offline ? 'wb_mc.py is not answering' : 'Checking…' }]
+
+  const actions = (
+    <PageActions>
+      <IconButton label="Start a session" icon={<SquarePen />} tooltipSide="bottom" onClick={startNew} />
+      {session && (
+        <>
+          <IconButton
+            label={railOpen ? 'Hide side rail' : 'Show side rail'}
+            icon={railOpen ? <PanelRightClose /> : <PanelRight />}
+            tooltipSide="bottom"
+            className="max-lg:hidden"
+            onClick={() => setRailOpen((o) => !o)}
+          />
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button size="sm" variant="ghost" icon={<PanelRight />} className="lg:hidden">Details</Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="max-h-[70vh] w-[min(320px,calc(100vw-24px))] overflow-y-auto p-0">
+              <RailContent session={session} accounts={accounts} />
+            </PopoverContent>
+          </Popover>
+        </>
+      )}
+    </PageActions>
+  )
+
+  if (isWork) {
+    return (
+      <>
+        {actions}
+        <EmptyState
+          icon={<UserX />}
+          title="Work account not set up on this PC"
+          hint="Sessions from this workbench run under your personal account. Set up the Work account to see them here."
+          className="flex-1"
         />
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button size="sm" variant="ghost" icon={<PanelRight />} className="lg:hidden">Details</Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" className="max-h-[70vh] w-[min(320px,calc(100vw-24px))] overflow-y-auto p-0">{rail}</PopoverContent>
-        </Popover>
-      </PageActions>
+      </>
+    )
+  }
 
+  let body: ReactNode
+  if (!feed.checked) {
+    body = (
+      <div className="flex min-h-0 flex-1 flex-col gap-3 p-4" aria-busy="true" aria-label="Loading sessions">
+        <Skeleton className="h-5 w-64" />
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="min-h-0 flex-1" />
+      </div>
+    )
+  } else if (session) {
+    body = (
       <div className="flex min-h-0 min-w-0 flex-1">
-        <section className="relative flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Lead chat">
-          <ScrollArea className="flex-1">
-            <div className="mx-auto flex w-full max-w-[760px] flex-col gap-4 px-4 pt-6" style={{ paddingBottom: composerH + 24 }}>
-              {started ? (
-                <Conversation isWork={isWork} plan={plan} />
-              ) : (
-                <Welcome onPick={(t) => { setDraft(t) }} />
-              )}
-            </div>
-          </ScrollArea>
-          <LeadComposer isWork={isWork} draft={draft} setDraft={setDraft} onHeightChange={setComposerH} />
-        </section>
+        <SessionChat key={session.session_id} session={session} stale={feed.stale} onBack={() => select(null)} />
         {railOpen && (
           <aside aria-label="Plan, workers and accounts" className="hidden w-[280px] shrink-0 border-l border-stroke-2 lg:flex lg:flex-col">
-            <ScrollArea className="flex-1">{rail}</ScrollArea>
+            <ScrollArea className="flex-1">
+              <RailContent session={session} accounts={accounts} />
+            </ScrollArea>
           </aside>
         )}
       </div>
-    </>
-  )
-}
+    )
+  } else if (chosenId && sessions) {
+    body = (
+      <EmptyState
+        icon={<SearchX />}
+        title="Session not found"
+        hint="This id is not in the feed. It may be old, or the link is wrong."
+        action={<Button variant="secondary" size="sm" onClick={() => select(null)}>Pick another session</Button>}
+        className="flex-1"
+      />
+    )
+  } else if (pending) {
+    body = (
+      <EmptyState
+        icon={<Loader2 className="animate-spin" />}
+        title="Waiting for claude to start…"
+        hint={`${pending.folder} · it appears here as soon as claude reports in.`}
+        action={<Button variant="ghost" size="sm" onClick={() => setPending(null)}>Stop waiting</Button>}
+        className="flex-1"
+      />
+    )
+  } else {
+    body = <SessionPicker sessions={sessions ?? null} stale={feed.stale} onPick={select} onStart={startNew} />
+  }
 
-/* ---------------- Welcome ---------------- */
-
-function Welcome({ onPick }: { onPick: (t: string) => void }) {
-  return (
-    <div className="flex flex-col items-center gap-6 pt-[8vh] text-center">
-      <div className="flex flex-col items-center gap-2">
-        <AgentMark vendor="claude" size={18} respectIdentity={false} />
-        <h1 className="text-hero font-semibold text-1">What should the lead work on?</h1>
-        <p className="text-body text-3">Routing is automatic. The lead splits the work across workers and reports back.</p>
-      </div>
-      <div className="flex flex-wrap justify-center gap-2">
-        {SUGGESTIONS.map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => onPick(s)}
-            className="max-w-full rounded-lg bg-fill-4 px-3 py-1.5 text-left text-caption text-2 shadow-[inset_0_0_0_1px_var(--stroke-3)] transition-colors-fast hover:bg-fill-3 hover:text-1"
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-/* ---------------- Transcript ---------------- */
-
-function Conversation({ isWork, plan }: { isWork: boolean; plan: typeof PLAN }) {
-  const [decision, setDecision] = useState<string | null>(null)
   return (
     <>
-      <PageHeader
-        as="h1"
-        title={<span className="block min-w-0 truncate">{CHAT_TITLE}</span>}
-        meta={
-          <>
-            <Badge tone="claude"><AgentMark vendor="claude" size={10} respectIdentity={false} />{LEAD_LABEL}</Badge>
-            <span className="text-caption text-3">{CHAT_WORKSPACE}</span>
-          </>
-        }
-        actions={
-          <Link to={SESSION_LINK} className="inline-flex items-center gap-1 text-caption text-3 transition-colors-fast hover:text-1">
-            Open session view <ExternalLink className="size-3" />
-          </Link>
-        }
-      />
-
-      <TranscriptUserBlock text={USER_PROMPT} />
-
-      <div className="animate-fade-in flex flex-col gap-3 text-body text-1">
-        <TranscriptAssistantText text="I will start by finding where links are created, then split the work." />
-        <div className="flex flex-col">
-          {TOOL_CALLS.map((t) => (
-            <TranscriptToolRow key={t.name + t.summary} name={t.name} input={[t.summary]} output={[{ text: t.output }]} dot="ok" />
-          ))}
-        </div>
-        <TranscriptAssistantText text="Here is how I am splitting it. Change any row and I will re-route it." />
-        <PlanCard plan={plan} />
-        <TranscriptAssistantText
-          className="text-2"
-          text={`Each worker has its own git worktree, so nothing collides.${isWork ? ' In Work, all workers run on Claude.' : ''}`}
-        />
-        <Card className="flex flex-col gap-2 p-3">
-          {decision ? (
-            <>
-              <Badge tone="success" caps className="self-start">Decision made</Badge>
-              <p className="text-body text-1">{DECISION_TEXT}</p>
-              <p className="text-body text-1">
-                <span className="text-3">You chose: </span>
-                <span className="font-medium">{decision}</span>
-              </p>
-              <p className="text-caption text-3">Sent to the lead — sending is simulated here</p>
-            </>
-          ) : (
-            <>
-              <Badge tone="attention" caps className="self-start">Needs a decision</Badge>
-              <p className="text-body text-1">{DECISION_TEXT}</p>
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="secondary" onClick={() => setDecision('Apply to link_batch')}>Apply to link_batch</Button>
-                <Button size="sm" variant="ghost" onClick={() => setDecision('Leave for now')}>Leave for now</Button>
-              </div>
-            </>
-          )}
-        </Card>
-      </div>
+      {actions}
+      {body}
     </>
   )
 }
 
-function PlanCard({ plan }: { plan: typeof PLAN }) {
-  const { vendorFor } = useIdentity()
-  return (
-    <Card className="divide-y divide-stroke-3">
-      {plan.map((p, i) => {
-        const state = PLAN_STATE[i] ?? 'pending'
-        return (
-          <div key={p.task} className="flex items-start gap-2 px-3 py-2">
-            <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">
-              <PlanIcon state={state} />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className={cn('text-body', state === 'done' ? 'text-3 line-through' : 'text-1')}>{p.task}</div>
-              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-meta text-3">
-                <span className="inline-flex items-center gap-1">
-                  <AgentMark vendor={p.vendor} size={10} />
-                  {VENDOR_NAME[vendorFor(p.vendor)]} · {p.model}
-                </span>
-                <span>{p.why}</span>
-              </div>
-            </div>
-          </div>
-        )
-      })}
-    </Card>
-  )
-}
+/* ---------------- Empty state + live sessions ---------------- */
 
-/* ---------------- Composer ---------------- */
-
-function LeadComposer({ isWork, draft, setDraft, onHeightChange }: { isWork: boolean; draft: string; setDraft: (v: string) => void; onHeightChange: (h: number) => void }) {
-  const [model, setModel] = useState<string>(MODELS[0])
-  const [allowed, setAllowed] = useState({ codex: true, gemini: true })
+function SessionPicker({ sessions, stale, onPick, onStart }: { sessions: McSession[] | null; stale: boolean; onPick: (id: string) => void; onStart: () => void }) {
+  const list = useMemo(() => byRecent(sessions ?? []), [sessions])
   return (
-    <Composer
-      onHeightChange={onHeightChange}
-      value={draft}
-      onChange={setDraft}
-      onSubmit={() => {}}
-      label="Message the lead"
-      placeholder="Message the lead. Type @ to pull in another chat."
-      disabledReason="Sending from the workbench comes later"
-      models={MODELS.map((m) => ({ value: m, label: m }))}
-      model={model}
-      onModelChange={setModel}
-      leftExtra={
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5 pl-1">
-          {isWork ? (
-            <Badge tone="work">Claude only · set by Acme Corp</Badge>
-          ) : (
-            <>
-              <span className="text-meta text-3">Workers allowed</span>
-              <WorkerChip label="Claude" vendor="claude" on locked />
-              <WorkerChip label="Codex" vendor="codex" on={allowed.codex} onToggle={() => setAllowed((a) => ({ ...a, codex: !a.codex }))} />
-              <WorkerChip label="Gemini" vendor="gemini" on={allowed.gemini} onToggle={() => setAllowed((a) => ({ ...a, gemini: !a.gemini }))} />
-            </>
-          )}
-        </div>
-      }
-    />
-  )
-}
-
-function WorkerChip({ label, vendor, on, locked, onToggle }: { label: string; vendor: Vendor; on: boolean; locked?: boolean; onToggle?: () => void }) {
-  const tip = locked ? 'The lead is always Claude' : on ? `Stop allowing ${label} workers` : `Allow ${label} workers`
-  return (
-    <Tooltip content={tip}>
-      <button
-        type="button"
-        aria-pressed={on}
-        aria-label={`${label} workers`}
-        aria-disabled={locked || undefined}
-        onClick={locked ? undefined : onToggle}
-        className={cn(
-          'inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-meta transition-colors-fast',
-          on ? 'bg-fill-3 text-1' : 'text-3 hover:bg-fill-4 hover:text-2',
-          locked && 'cursor-default',
+    <ScrollArea className="flex-1">
+      <div className="mx-auto flex w-full max-w-[640px] flex-col gap-6 px-4 py-10">
+        <EmptyState
+          icon={<AgentMark vendor="claude" size={14} respectIdentity={false} />}
+          title="No session chosen"
+          hint={
+            sessions === null
+              ? 'wb_mc.py is not answering, so live sessions cannot be listed. You can still start a new one.'
+              : 'Start a new session, or pick a live one to follow and message it from here.'
+          }
+          action={<Button icon={<Play />} onClick={onStart}>Start a session</Button>}
+        />
+        {list.length > 0 && (
+          <section className="flex flex-col gap-1" aria-label="Live sessions">
+            <h2 className="caps flex items-center gap-2 px-2">
+              Sessions
+              <span className="tabular-nums text-3">{list.length}</span>
+              {stale && <Badge tone="attention">Stale</Badge>}
+            </h2>
+            {list.map((s) => (
+              <ListRow
+                key={s.session_id}
+                leading={<StatusDot status={toStatus(s.status, s.online)} />}
+                trailing={<span className="text-meta text-3">{workspaceName(s.cwd) || 'Unknown folder'}</span>}
+                onClick={() => onPick(s.session_id)}
+              >
+                <span className="truncate">{sessionTitle(s)}</span>
+              </ListRow>
+            ))}
+          </section>
         )}
-      >
-        <AgentMark vendor={vendor} size={10} respectIdentity={false} />
-        <span className="max-sm:sr-only">{label}</span>
-      </button>
-    </Tooltip>
+      </div>
+    </ScrollArea>
+  )
+}
+
+/* ---------------- Selected session ---------------- */
+
+function SessionChat({ session, stale, onBack }: { session: McSession; stale: boolean; onBack: () => void }) {
+  const [draft, setDraft] = useState('')
+  const [sending, setSending] = useState(false)
+  const [inset, setInset] = useState(120)
+  const status = toStatus(session.status, session.online)
+  const polling = !['ended', 'offline'].includes(status)
+  const act = useActivity(session.session_id, 'lead', polling)
+  const rows = useMemo<TranscriptRow[]>(() => liveRows(session, act.items), [session, act.items])
+
+  const sendPort = session.online && session.port != null ? session.port : null
+  const blocked = !session.online
+    ? 'Session is not running'
+    : sendPort == null
+      ? 'No terminal wrapper for this session'
+      : sending
+        ? 'Sending…'
+        : undefined
+  const submit = async (text: string) => {
+    if (sendPort == null || sending) return
+    setSending(true)
+    const r = await sendPrompt(sendPort, text)
+    setSending(false)
+    if (r.ok) {
+      setDraft('')
+      toast.success('Sent to the lead')
+    } else toast.error(`Not sent: ${r.error ?? 'unknown error'}`)
+  }
+
+  return (
+    <section className="relative flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Lead chat">
+      <div className="px-4 pt-4">
+        <div className="mx-auto w-full max-w-[760px]">
+          <PageHeader
+            as="h1"
+            title={<span className="block min-w-0 truncate">{sessionTitle(session)}</span>}
+            meta={
+              <>
+                <Badge tone="claude"><AgentMark vendor="claude" size={10} respectIdentity={false} />{leadModelLabel(session)}</Badge>
+                <span className="text-caption text-3">{workspaceName(session.cwd) || 'Unknown folder'}</span>
+                <span className="inline-flex items-center gap-1 text-caption text-3">
+                  <StatusDot status={status} />
+                  {session.status}
+                </span>
+                {stale && <Badge tone="attention">Stale</Badge>}
+              </>
+            }
+            actions={
+              <>
+                <button type="button" onClick={onBack} className="text-caption text-3 transition-colors-fast hover:text-1">All sessions</button>
+                <Link to={`/mission/session/${session.session_id}`} className="inline-flex items-center gap-1 text-caption text-3 transition-colors-fast hover:text-1">
+                  Open in Mission control <ExternalLink className="size-3" />
+                </Link>
+              </>
+            }
+          />
+        </div>
+      </div>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <Transcript rows={rows} vendorOf={() => undefined} onAsk={() => {}} onOpenAgent={() => {}} bottomInset={inset} />
+        <Composer
+          value={draft}
+          onChange={setDraft}
+          onSubmit={submit}
+          label="Message the lead"
+          placeholder="Message the lead…"
+          disabledReason={blocked}
+          onHeightChange={setInset}
+          maxWidthClass="max-w-[760px]"
+          leftExtra={<span className="pl-1 text-meta text-3">Lead · {leadModelLabel(session)}</span>}
+        />
+      </div>
+    </section>
   )
 }
 
@@ -273,41 +307,52 @@ function RailSection({ title, count, children }: { title: string; count: number;
   )
 }
 
-function RailContent({ plan, live, accounts }: { plan: typeof PLAN; live: typeof LIVE; accounts: AgAccount[] }) {
+function RailContent({ session, accounts }: { session: McSession; accounts: AgAccount[] }) {
   const { vendorFor } = useIdentity()
+  const todos: Todo[] = plannedOf(session).todos ?? []
   return (
     <div className="flex flex-col">
-      <RailSection title="Plan" count={plan.length}>
-        <ul className="flex flex-col gap-1.5">
-          {plan.map((p, i) => {
-            const state = PLAN_STATE[i] ?? 'pending'
-            return (
-              <li key={p.task} className="flex items-start gap-2 text-caption">
+      <RailSection title="Plan" count={todos.length}>
+        {todos.length === 0 ? (
+          <p className="text-caption text-3">No plan reported</p>
+        ) : (
+          <ul className="flex flex-col gap-1.5">
+            {todos.map((t, i) => (
+              <li key={`${i}-${t.content}`} className="flex items-start gap-2 text-caption">
                 <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center">
-                  <PlanIcon state={state} />
+                  <TodoIcon status={t.status} />
                 </span>
-                <span className={cn('min-w-0', state === 'done' ? 'text-3' : 'text-2')}>{p.task}</span>
+                <span className={cn('min-w-0', t.status === 'completed' ? 'text-3 line-through' : 'text-2')}>{t.content}</span>
               </li>
-            )
-          })}
-        </ul>
+            ))}
+          </ul>
+        )}
       </RailSection>
-      <RailSection title="Live workers" count={live.length}>
-        <ul className="flex flex-col gap-2">
-          {live.map((r) => (
-            <li key={r.task} className="flex flex-col gap-0.5">
-              <div className="flex items-center gap-1.5 text-caption text-1">
-                <AgentMark vendor={r.vendor} size={10} />
-                <span className="min-w-0 truncate">{VENDOR_NAME[vendorFor(r.vendor)]} · {r.model}</span>
-                <StatusDot status={r.status === 'running' ? 'running' : 'done'} className="ml-auto" />
-              </div>
-              <div className="text-caption text-2">{r.task}</div>
-              <div className="text-meta text-3">{r.depth}</div>
-            </li>
-          ))}
-        </ul>
-        <Link to="/mission" className="inline-flex items-center gap-1 text-caption text-3 transition-colors-fast hover:text-1">
-          Open mission control <ExternalLink className="size-3" />
+      <RailSection title="Live workers" count={session.agents.length}>
+        {session.agents.length === 0 ? (
+          <p className="text-caption text-3">No workers in this session</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {session.agents.map((a) => {
+              const v = vendorOfModel(a.model)
+              return (
+                <li key={a.agent_id} className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5 text-caption text-1">
+                    <AgentMark vendor={v} size={10} />
+                    <span className="min-w-0 truncate">{agentName(a)}</span>
+                    <StatusDot status={toStatus(a.state, true)} className="ml-auto" />
+                  </div>
+                  <div className="text-meta text-3">
+                    {VENDOR_NAME[vendorFor(v)]}
+                    {a.model ? ` · ${modelLabel(a.model)}` : ''} · {a.state}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        <Link to={`/mission/session/${session.session_id}`} className="inline-flex items-center gap-1 text-caption text-3 transition-colors-fast hover:text-1">
+          Open in Mission control <ExternalLink className="size-3" />
         </Link>
       </RailSection>
       <RailSection title="Accounts" count={accounts.length}>

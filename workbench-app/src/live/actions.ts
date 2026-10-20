@@ -31,6 +31,22 @@ export function sendPrompt(port: number, text: string): Promise<ActionResult> {
   return post('send', { port, text })
 }
 
+/** Raw keystrokes into the session's terminal (what you type in the in-app terminal). 1-4096 chars. */
+export function sendRaw(port: number, raw: string): Promise<ActionResult> {
+  return post('send', { port, raw })
+}
+
+/** Named key: 'esc' interrupts claude (Pause); '1'/'2'/'3' answer a numbered prompt. */
+export function sendKeys(port: number, keys: 'esc' | '1' | '2' | '3'): Promise<ActionResult> {
+  return post('send', { port, keys })
+}
+
+/** Resize the session's pseudo-terminal (10-500 each way). */
+export function resizeTerm(port: number, cols: number, rows: number): Promise<ActionResult> {
+  const c = (n: number) => Math.max(10, Math.min(500, Math.round(n)))
+  return post('send', { port, resize: [c(cols), c(rows)] })
+}
+
 /** Open a new console window running claude (through the wrapper) in `folder` (absolute path). */
 export function startSession(folder: string): Promise<ActionResult> {
   return post('start', { folder })

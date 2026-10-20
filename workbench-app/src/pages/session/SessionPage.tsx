@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { Archive, MessageSquare, Network, Pause, Pencil, SearchX } from 'lucide-react'
+import { MessageSquare, Network, Pause, Pencil, SearchX, TerminalSquare } from 'lucide-react'
+import { LiveTerminal } from '../../components/terminal/LiveTerminal'
 import {
   AgentMark,
   Badge,
@@ -32,7 +33,7 @@ import { SAMPLE_SESSIONS } from '../mission/data'
 import { useIdentity } from '../../context/identity'
 import type { McSession, TranscriptRow, Vendor } from '../../data/types'
 import { sessionTitle, useMissionFeed, workspaceName } from '../../live/mission'
-import { sendPrompt } from '../../live/actions'
+import { sendKeys, sendPrompt } from '../../live/actions'
 import { AgentCloud } from './Cloud'
 import { AgentPanel, type Tab } from './Panel'
 import {
@@ -55,7 +56,7 @@ import { liveSummary, sampleSummary } from './summaryModel'
 import { SummaryStrip } from './SummaryStrip'
 import { Transcript } from './transcript/Transcript'
 
-type View = 'chat' | 'cloud' | 'agent'
+type View = 'chat' | 'cloud' | 'agent' | 'term'
 
 const SAMPLE_IDS = new Set(['zzz-sample', ...SAMPLE_SESSIONS.map((s) => s.id)])
 
@@ -180,6 +181,14 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
   const prompt = live ? live.last_prompt.trim().replace(/\s+/g, ' ') : ''
   const task = live ? (renamed ? prompt : live.cwd) : sample.title
   const hasPort = live ? live.port != null : true
+  // Only a live, online session with a terminal wrapper can be typed to (composer, terminal, Pause).
+  const sendPort = live && live.online && live.port != null ? live.port : null
+  const pause = async () => {
+    if (sendPort == null) return
+    const r = await sendKeys(sendPort, 'esc')
+    if (r.ok) toast('Sent Esc: claude stops what it is doing')
+    else toast.error(`Could not pause: ${r.error ?? 'unknown error'}`)
+  }
 
   const summary = live ? liveSummary(live, now) : sampleSummary(sample)
   const liveHistory = useFinishHistory(live?.eta ? (live.eta.finish_at ?? null) : null)
@@ -232,11 +241,8 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
           <ContextMenuItem icon={<Pencil />} onSelect={startEdit}>
             Rename
           </ContextMenuItem>
-          <ContextMenuItem icon={<Pause />} onSelect={() => toast('Pausing sessions comes later')}>
-            Pause session
-          </ContextMenuItem>
-          <ContextMenuItem icon={<Archive />} onSelect={() => toast('Archiving sessions comes later')}>
-            Archive session
+          <ContextMenuItem icon={<Pause />} disabled={sendPort == null} onSelect={() => void pause()}>
+            Pause (send Esc)
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -260,10 +266,18 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
         <AgentMark vendor="claude" size={10} />
         <span className="text-claude">{leadModel}</span>
       </span>
-      <Tooltip content={hasPort ? 'Opening the terminal from here comes later' : 'No terminal wrapper is running for this session'} side="bottom">
+      {sendPort != null && (
+        <Button variant="secondary" size="md" icon={<Pause />} onClick={() => void pause()}>
+          Pause
+        </Button>
+      )}
+      <Tooltip
+        content={sendPort != null ? 'Watch and type to the real terminal' : !live ? 'Sample session' : hasPort ? 'Session is not running' : 'No terminal wrapper is running for this session'}
+        side="bottom"
+      >
         <span tabIndex={0} className="inline-flex shrink-0 rounded-md">
-          <Button variant="secondary" size="md" disabled>
-            Resume lead in terminal
+          <Button variant="secondary" size="md" icon={<TerminalSquare />} disabled={sendPort == null} onClick={() => setView('term')}>
+            Open terminal
           </Button>
         </span>
       </Tooltip>
@@ -289,8 +303,6 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
   const chatEl = <Transcript rows={rows} vendorOf={(n) => nodeByName(n)?.vendor} onAsk={setAsk} onOpenAgent={openAgent} bottomInset={inset} />
 
   const agentCount = agentNodes.length
-  // Only a live session with a running terminal wrapper can take a prompt.
-  const sendPort = live && live.online && live.port != null ? live.port : null
   const sendBlocked = !live
     ? 'Sample session: nothing to send to'
     : sendPort == null
@@ -334,14 +346,6 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
           </span>
         </>
       }
-      rightExtra={
-        <>
-          <Button variant="secondary" size="sm" className="hidden sm:inline-flex" onClick={() => toast('Opening the full conversation comes later')}>
-            Open full conversation
-          </Button>
-          <span className="hidden px-1 text-meta text-3 sm:inline">Auto</span>
-        </>
-      }
     />
   )
 
@@ -359,6 +363,11 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
           Agent cloud
         </TabsTrigger>
         {narrow && <TabsTrigger value="agent">Agent</TabsTrigger>}
+        {sendPort != null && (
+          <TabsTrigger value="term" icon={<TerminalSquare />}>
+            Terminal
+          </TabsTrigger>
+        )}
         <span className="my-auto ml-auto hidden truncate pl-4 text-caption text-3 lg:block">Every prompt you sent to this lead and what happened after it</span>
       </TabsList>
       <div className="relative flex min-h-0 flex-1 flex-col">
@@ -373,7 +382,12 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
             {panelEl}
           </TabsContent>
         )}
-        {current !== 'agent' && composer}
+        {current === 'term' && sendPort != null && (
+          <TabsContent value="term" className="flex flex-col">
+            <LiveTerminal port={sendPort} className="min-h-0 flex-1" />
+          </TabsContent>
+        )}
+        {current !== 'agent' && current !== 'term' && composer}
       </div>
     </Tabs>
   )

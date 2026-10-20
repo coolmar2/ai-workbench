@@ -1,4 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { LiveTerminal } from '../../components/terminal/LiveTerminal'
+import { useStartSession } from '../../components/shell/StartSession'
+import { sessionTitle } from '../../live/mission'
 import { useWsAgents, useOutputLog } from './api'
 import { AgentsList } from './AgentsList'
 import { Codicon, IconBtn } from './chrome'
@@ -32,6 +35,35 @@ function OutputView() {
     <div className="vsc-term">
       {lines.length === 0 ? <span style={{ color: '#9d9d9d' }}>No output yet.</span> : lines.map((l, i) => <div key={i}>{l}</div>)}
       <div ref={end} />
+    </div>
+  )
+}
+
+/** Terminal tab: the real terminal of a running session of this workspace. */
+function TerminalView({ root, name }: { root: string; name: string }) {
+  const { agents } = useWsAgents(root)
+  const { open } = useStartSession()
+  const [pick, setPick] = useState<string | null>(null)
+  const list = agents.sessions.filter((s) => s.online && s.port != null)
+  const cur = list.find((s) => s.session_id === pick) ?? list[0]
+  if (!cur || cur.port == null) {
+    return (
+      <div className="vsc-empty">
+        <div>No running session in this folder</div>
+        <button type="button" className="vsc-btn" style={{ marginTop: 8 }} onClick={() => open(root)}>Start a session</button>
+      </div>
+    )
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }} aria-label={`Terminal of ${name}`}>
+      {list.length > 1 && (
+        <select aria-label="Session" value={cur.session_id} onChange={(e) => setPick(e.target.value)} style={{ alignSelf: 'flex-start', margin: '2px 8px' }}>
+          {list.map((s) => <option key={s.session_id} value={s.session_id}>{sessionTitle(s)}</option>)}
+        </select>
+      )}
+      <div style={{ flex: 1, minHeight: 0 }}>
+        <LiveTerminal key={cur.port} port={cur.port} />
+      </div>
     </div>
   )
 }
@@ -72,14 +104,17 @@ export function BottomPanel({ ws, tab, sample, onClose }: { ws: WsMeta; tab: Pan
             ))
           ))}
         {tab === 'output' && <OutputView />}
-        {tab === 'terminal' && (
-          <div className="vsc-term">
-            <div style={{ color: '#9d9d9d' }}>The terminal is not available in this read-only editor. Commands agents run appear under Agents.</div>
-            <div>
-              <span style={{ color: '#2ea043' }}>{ws.name}</span> $ <span style={{ background: '#aeafad', color: 'transparent' }}>_</span>
+        {tab === 'terminal' &&
+          (sample ? (
+            <div className="vsc-term">
+              <div style={{ color: '#9d9d9d' }}>The terminal is not available in sample workspaces. Open a real folder to use it.</div>
+              <div>
+                <span style={{ color: '#2ea043' }}>{ws.name}</span> $ <span style={{ background: '#aeafad', color: 'transparent' }}>_</span>
+              </div>
             </div>
-          </div>
-        )}
+          ) : (
+            <TerminalView root={ws.root} name={ws.name} />
+          ))}
         {tab === 'agents' && <AgentsList root={ws.root} sample={sample} />}
         {tab === 'edits' && <AgentEditsView root={ws.root} />}
       </div>

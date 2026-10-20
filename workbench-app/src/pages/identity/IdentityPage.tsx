@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { ArrowRightLeft, Check, Eye, Laptop, Radio } from 'lucide-react'
 import { useIdentity, type Identity } from '../../context/identity'
 import {
@@ -10,12 +9,11 @@ import {
   PageHeader,
   ScrollArea,
   SegmentedControl,
-  Switch,
   cn,
   toast,
 } from '../../components/ui'
 import { useAccounts } from '../../live/accounts'
-import { buildCards, EXPLANATION, HEADING, NOTES, PERSONAL_RC, PERSONAL_RC_OFF, RC_OFF, RC_ON, WORK_RC_NOTE, type IdentityCard } from './data'
+import { buildCards, EXPLANATION, HEADING, NOTES, RC_PERSONAL, RC_WORK, type IdentityCard } from './data'
 
 const NOTE_ICONS = [ArrowRightLeft, Laptop, Eye]
 const LABEL: Record<Identity, string> = { personal: 'Personal', work: 'Work' }
@@ -84,9 +82,7 @@ export default function IdentityPage() {
 }
 
 function AccountCard({ card: c, active, onSwitch }: { card: IdentityCard; active: boolean; onSwitch: () => void }) {
-  const [rc, setRc] = useState(true)
   const isWork = c.id === 'work'
-  const rcText = isWork ? (rc ? RC_ON : RC_OFF) : rc ? PERSONAL_RC : PERSONAL_RC_OFF
 
   return (
     <Card
@@ -131,19 +127,9 @@ function AccountCard({ card: c, active, onSwitch }: { card: IdentityCard; active
       <div className="mt-1 flex items-start gap-3 border-t border-stroke-3 pt-3">
         <Radio aria-hidden className="mt-0.5 size-3.5 text-3" />
         <div className="min-w-0 flex-1">
-          <label htmlFor={`rc-${c.id}`} className="text-body font-medium text-1">
-            Remote Control
-          </label>
-          <p className={cn('text-caption', rc ? 'text-3' : isWork ? 'text-danger' : 'text-3')}>{rcText}</p>
-          {isWork && <p className="mt-1 text-meta text-3">{WORK_RC_NOTE}</p>}
+          <div className="text-body font-medium text-1">Remote Control</div>
+          <p className="text-caption text-3">{isWork ? RC_WORK : RC_PERSONAL}</p>
         </div>
-        <Switch
-          id={`rc-${c.id}`}
-          checked={rc}
-          onCheckedChange={setRc}
-          aria-label={isWork ? 'Remote Control (preview of the admin setting)' : 'Remote Control'}
-          className="mt-0.5"
-        />
       </div>
 
       <div className="mt-auto pt-4">

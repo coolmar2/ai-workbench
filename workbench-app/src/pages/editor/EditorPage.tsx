@@ -202,7 +202,7 @@ export default function EditorPage() {
   const crumbs = useMemo(() => [{ label: 'Editor', to: '/editor' }, ...(activeMeta ? [{ label: activeMeta.name }] : [])], [activeMeta])
   const candidates = workspaces.filter((x) => !tabs.some((t) => t.root === x.root))
 
-  const aiBody = <AiPanel extra={<IconBtn icon="close" label="Close Chat" shortcut="Ctrl Alt B" onClick={toggleChat} />} />
+  const aiBody = <AiPanel root={root} extra={<IconBtn icon="close" label="Close Chat" shortcut="Ctrl Alt B" onClick={toggleChat} />} />
   const sideBody = activeMeta ? <SideBar ws={activeMeta} w={w} ui={st} view={st.sideView} sample={sampleRoot} /> : null
 
   const wide = mode === 'wide'

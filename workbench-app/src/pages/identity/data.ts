@@ -57,14 +57,12 @@ export function buildCards({ accounts, offline }: AccountsState): IdentityCard[]
   ]
 }
 
-export const PERSONAL_RC = 'On, your setting'
-export const PERSONAL_RC_OFF = 'Off, your setting. Personal sessions stay on this machine.'
-export const WORK_RC_NOTE = "The switch previews your org admin's setting. You can't change it yourself."
-export const RC_ON = 'Enabled by your org admin. You can reach work sessions from other devices.'
-export const RC_OFF = "Turned off by your org admin. Work sessions can't be reached from other devices."
+// The workbench can't read or change the Remote Control setting yet, so it says how to do it instead of showing a switch.
+export const RC_PERSONAL = 'Set inside claude: run /remote-control in a session (or turn it on in /config) to reach it from the Claude app.'
+export const RC_WORK = "On the work laptop, your org admin decides whether Remote Control is allowed."
 
 export const NOTES: { title: string; body: string }[] = [
   { title: 'What switching does', body: 'Switching changes which account new sessions use and which models are offered. Session history from both identities stays visible in this spike.' },
   { title: 'Where work sessions run', body: 'A work session stays on the machine where it started, for example your work laptop on the office network. From home, only prompts and results travel, through Remote Control.' },
-  { title: 'Always visible', body: 'The sidebar footer shows Personal or Work on every screen, so you never wonder which account a session is running under.' },
+  { title: 'Always visible', body: 'The top bar shows Personal or Work on every screen, so you never wonder which account a session is running under.' },
 ]

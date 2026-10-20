@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CommandPalette } from './CommandPalette'
+import { StartSessionProvider } from './StartSession'
 import { TopBar } from './TopBar'
 import { ShellContext, useMediaQuery, type Crumb, type ShellValue } from './context'
 import { NAV } from './nav'
@@ -46,6 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <ShellContext.Provider value={value}>
+      <StartSessionProvider>
       <a
         href="#main"
         onClick={(e) => {
@@ -63,6 +65,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+      </StartSessionProvider>
     </ShellContext.Provider>
   )
 }

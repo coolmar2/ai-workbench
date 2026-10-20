@@ -3,8 +3,9 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { motion } from 'motion/react'
 import { ChevronRight, FolderClosed, Plus, WifiOff } from 'lucide-react'
 import { useMissionFeed, sessionTitle, isRunning } from '../../live/mission'
-import { EmptyState, Eta, ListRow, RelativeTime, SkeletonRows, StatusDot, Tooltip, cn, toStatus } from '../ui'
+import { Button, EmptyState, Eta, ListRow, RelativeTime, SkeletonRows, StatusDot, Tooltip, cn, toStatus } from '../ui'
 import { sessionIdFromPath, groupByWorkspace, type WorkspaceGroup } from './nav'
+import { useStartSession } from './StartSession'
 
 const MAX_SESSIONS = 6
 
@@ -19,6 +20,7 @@ export function WorkspaceList({ onNavigate }: { onNavigate?: () => void }) {
   const feed = useMissionFeed()
   const { pathname } = useLocation()
   const current = sessionIdFromPath(pathname)
+  const startSession = useStartSession()
 
   if (!feed.checked) return <SkeletonRows rows={4} />
   if (!feed.live)
@@ -32,15 +34,34 @@ export function WorkspaceList({ onNavigate }: { onNavigate?: () => void }) {
     )
   const groups = groupByWorkspace(feed.state?.sessions ?? [])
   if (!groups.length)
-    return <EmptyState compact icon={<FolderClosed />} title="No sessions yet" hint="Start Claude Code in a folder and it shows up here." />
+    return (
+      <EmptyState
+        compact
+        icon={<FolderClosed />}
+        title="No sessions yet"
+        hint="Start Claude Code in a folder and it shows up here."
+        action={
+          <Button size="sm" icon={<Plus />} onClick={() => startSession.open()}>
+            New session
+          </Button>
+        }
+      />
+    )
 
   return (
     <div className="flex flex-col gap-px">
       {groups.map((g) => (
         <WorkspaceRows key={g.cwd} group={g} current={current} onNavigate={onNavigate} />
       ))}
-      <ListRow leading={<Plus />} className="text-3" onClick={() => onNavigate?.()} asChild>
-        <NavLink to="/agent">New session</NavLink>
+      <ListRow
+        leading={<Plus />}
+        className="text-3"
+        onClick={() => {
+          onNavigate?.()
+          startSession.open()
+        }}
+      >
+        New session
       </ListRow>
     </div>
   )
