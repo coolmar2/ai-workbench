@@ -32,7 +32,7 @@ src/
   live/mission.ts     useMissionFeed() poller + pure mapping helpers
   components/         shared UI (owned by the lead, screens import, never edit)
     TopBar.tsx        nav, identity switch, Manage link, search, phone indicator, FeedChip
-    marks.tsx         AgentMark (circle/square/triangle stand-ins), ModelTag, IdentityMark,
+    marks.tsx         AgentMark (real vendor logos from src/assets/vendors), ModelTag, IdentityMark,
                       StatusBadge, ProgressRing
     vendor.ts         VENDOR_COLOR / VENDOR_NAME / useVendor (Work maps every vendor to Claude)
     Transcript.tsx    Claude Code-style rows: user, thinking, text, tool IN/OUT, lead-asks

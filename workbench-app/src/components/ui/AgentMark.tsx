@@ -1,13 +1,13 @@
 import { cn } from './cn'
 import type { Vendor } from '../../data/types'
 import { useIdentity } from '../../context/identity'
+// Brand marks from LobeHub's icon set (@lobehub/icons-static-svg, MIT). The logos are their owners' trademarks.
+import claudeLogo from '../../assets/vendors/claude.svg'
+import codexLogo from '../../assets/vendors/codex.svg'
+import geminiLogo from '../../assets/vendors/gemini.svg'
 
 const NAME: Record<Vendor, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' }
-const SHAPE: Record<Vendor, string> = {
-  claude: 'rounded-full bg-claude',
-  codex: 'rounded-[3px] bg-codex',
-  gemini: 'bg-gemini [clip-path:polygon(50%_0,100%_100%,0_100%)]',
-}
+const LOGO: Record<Vendor, string> = { claude: claudeLogo, codex: codexLogo, gemini: geminiLogo }
 const SIZE = { 10: 'size-2.5', 14: 'size-3.5', 18: 'size-[18px]' } as const
 
 export interface AgentMarkProps {
@@ -23,20 +23,20 @@ export interface AgentMarkProps {
   className?: string
 }
 
-/** Vendor mark stand-in: Claude circle, Codex rounded square, Gemini triangle. Never real logos. */
+/** Vendor logo: Claude, Codex or Gemini. */
 export function AgentMark({ vendor, size = 10, respectIdentity = true, activity, label, className }: AgentMarkProps) {
   const { vendorFor } = useIdentity()
   const v = respectIdentity ? vendorFor(vendor) : vendor
   const name = label ?? NAME[v]
   return (
-    <span
-      role={name ? 'img' : undefined}
-      aria-label={name || undefined}
+    <img
+      src={LOGO[v]}
+      alt={name}
       aria-hidden={name ? undefined : true}
+      draggable={false}
       className={cn(
-        'inline-block shrink-0',
+        'inline-block shrink-0 select-none object-contain',
         SIZE[size],
-        SHAPE[v],
         activity === 'editing' && 'animate-pulse',
         activity === 'reading' && 'opacity-55',
         className,

@@ -24,7 +24,7 @@ Rules:
 - Identity: `useIdentity()` from src/context/identity. Work = Claude only: use `<AgentMark vendor=...>`
   (it already maps to Claude in Work) and the board's Work-variant data; hide Codex/Gemini where the
   board hides them.
-- Vendor marks: only the shared AgentMark / ModelTag / ProgressRing. Never real brand logos.
+- Vendor marks: only the shared AgentMark / ModelTag / ProgressRing. AgentMark draws the real vendor logos; never inline a logo elsewhere.
 - Accessibility basics: real <button>s for clickable things, aria-labels on icon-only buttons,
   hover cards also reachable by focus/click, no keyboard traps.
 - Responsive: desktop must match the 1440x900 board. Below 700px wide (media query max-width: 699px):
