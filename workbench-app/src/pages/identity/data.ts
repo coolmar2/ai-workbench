@@ -1,4 +1,5 @@
 import type { Vendor } from '../../data/types'
+import { accountStatus, type AccountsState } from '../../live/accounts'
 
 export interface AccountRow {
   vendor: Vendor
@@ -21,31 +22,40 @@ export const HEADING = 'Identity'
 export const EXPLANATION =
   "Switching identity changes which account new sessions use. Session history from both identities stays visible in this spike. In Work, only Claude is available, because work runs on your organization's Claude subscription."
 
-export const CARDS: IdentityCard[] = [
-  {
-    id: 'personal',
-    badge: 'PERSONAL',
-    title: 'Omar Mostafa, personal',
-    subtitle: 'Your own Claude Max plan. Claude Code signed in with your account.',
-    accounts: [
-      { vendor: 'claude', name: 'Claude', detail: 'Opus 5.5, Sonnet 5.5, Haiku 5.5 · Claude Code login', status: 'Signed in', available: true },
-      { vendor: 'codex', name: 'Codex', detail: 'ChatGPT account sign-in · Codex CLI', status: 'Signed in', available: true },
-      { vendor: 'gemini', name: 'Gemini', detail: 'Google account sign-in', status: 'Signed in', available: true },
-    ],
-  },
-  {
-    id: 'work',
-    badge: 'WORK',
-    managed: 'Managed by your organization',
-    title: 'Acme Corp, Claude Enterprise',
-    subtitle: "Your organization's seat. Claude Code signed in through Acme single sign-on.",
-    accounts: [
-      { vendor: 'claude', name: 'Claude', detail: 'Opus 5.5, Sonnet 5.5, Haiku 5.5, as your org allows', status: 'Signed in', available: true },
-      { vendor: 'codex', name: 'Codex', detail: "Off in this identity. Work runs on the org's Claude subscription only.", status: 'Not available', available: false },
-      { vendor: 'gemini', name: 'Gemini', detail: "Off in this identity. Work runs on the org's Claude subscription only.", status: 'Not available', available: false },
-    ],
-  },
-]
+const VENDOR_NAME: Record<Vendor, string> = { claude: 'Claude', codex: 'Codex', gemini: 'Gemini' }
+const WORK_OFF = "Off in this identity. Work runs on the org's Claude subscription only."
+
+/** Identity cards from the live account check (GET /accounts). `available` = signed in and usable. */
+export function buildCards({ accounts, offline }: AccountsState): IdentityCard[] {
+  const claude = accounts?.find((a) => a.vendor === 'claude')
+  const personalSubtitle = !accounts
+    ? offline
+      ? 'Account status unknown: wb_mc.py is not answering.'
+      : 'Checking which CLIs are signed in…'
+    : claude?.signed_in
+      ? `Claude Code signed in${claude.plan ? ` on ${claude.plan}` : ''}${claude.email ? ` as ${claude.email}` : ''}.`
+      : 'Claude Code is not signed in on this PC. Run claude once to sign in.'
+  const personalRows: AccountRow[] = (['claude', 'codex', 'gemini'] as Vendor[]).map((v) => {
+    const a = accounts?.find((x) => x.vendor === v)
+    if (!a) return { vendor: v, name: VENDOR_NAME[v], detail: offline ? 'Backend offline' : 'Checking…', status: 'Unknown', available: false }
+    return { vendor: v, name: VENDOR_NAME[v], detail: a.detail, status: accountStatus(a), available: a.signed_in === true }
+  })
+  return [
+    { id: 'personal', badge: 'PERSONAL', title: 'Personal', subtitle: personalSubtitle, accounts: personalRows },
+    {
+      id: 'work',
+      badge: 'WORK',
+      managed: 'Managed by your organization',
+      title: 'Work',
+      subtitle: 'Not set up on this PC. Your work account stays on the work laptop.',
+      accounts: [
+        { vendor: 'claude', name: 'Claude', detail: 'Sign in with your organization on the work laptop', status: 'Not set up', available: false },
+        { vendor: 'codex', name: 'Codex', detail: WORK_OFF, status: 'Not available', available: false },
+        { vendor: 'gemini', name: 'Gemini', detail: WORK_OFF, status: 'Not available', available: false },
+      ],
+    },
+  ]
+}
 
 export const PERSONAL_RC = 'On, your setting'
 export const PERSONAL_RC_OFF = 'Off, your setting. Personal sessions stay on this machine.'

@@ -14,7 +14,8 @@ import {
   cn,
   toast,
 } from '../../components/ui'
-import { CARDS, EXPLANATION, HEADING, NOTES, PERSONAL_RC, PERSONAL_RC_OFF, RC_OFF, RC_ON, WORK_RC_NOTE, type IdentityCard } from './data'
+import { useAccounts } from '../../live/accounts'
+import { buildCards, EXPLANATION, HEADING, NOTES, PERSONAL_RC, PERSONAL_RC_OFF, RC_OFF, RC_ON, WORK_RC_NOTE, type IdentityCard } from './data'
 
 const NOTE_ICONS = [ArrowRightLeft, Laptop, Eye]
 const LABEL: Record<Identity, string> = { personal: 'Personal', work: 'Work' }
@@ -25,6 +26,7 @@ const LABEL: Record<Identity, string> = { personal: 'Personal', work: 'Work' }
  */
 export default function IdentityPage() {
   const { identity, setIdentity } = useIdentity()
+  const cards = buildCards(useAccounts())
 
   const switchTo = (id: Identity) => {
     if (id === identity) return
@@ -52,7 +54,7 @@ export default function IdentityPage() {
         />
 
         <div className="grid gap-4 md:grid-cols-2">
-          {CARDS.map((c) => (
+          {cards.map((c) => (
             <AccountCard key={c.id} card={c} active={identity === c.id} onSwitch={() => switchTo(c.id)} />
           ))}
         </div>

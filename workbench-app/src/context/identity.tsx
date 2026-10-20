@@ -1,5 +1,15 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import type { Vendor } from '../data/types'
+import { useAccounts, type AccountsState } from '../live/accounts'
+
+/** Top bar / palette line for the personal identity, from the live Claude account check. */
+function personalLabel({ accounts, offline }: AccountsState): string {
+  if (!accounts) return offline ? 'Account status unknown (backend offline)' : 'Checking account…'
+  const c = accounts.find((a) => a.vendor === 'claude')
+  if (!c?.installed) return 'Claude Code not installed'
+  if (!c.signed_in) return 'Claude Code not signed in'
+  return [c.email, c.plan].filter(Boolean).join(' · ') || 'Claude Code signed in'
+}
 
 export type Identity = 'personal' | 'work'
 
@@ -29,6 +39,7 @@ function readStored(): Identity {
 
 export function IdentityProvider({ children }: { children: ReactNode }) {
   const [identity, setState] = useState<Identity>(readStored)
+  const acc = useAccounts()
   const setIdentity = useCallback((id: Identity) => {
     setState(id)
     try { localStorage.setItem(KEY, id) } catch { /* private mode */ }
@@ -42,9 +53,9 @@ export function IdentityProvider({ children }: { children: ReactNode }) {
       vendors: isWork ? ['claude'] : ['claude', 'codex', 'gemini'],
       vendorFor: (v) => (isWork ? 'claude' : v),
       orgLabel: 'Acme Corp · Claude only',
-      accountLabel: isWork ? 'Acme Corp · Claude Enterprise' : 'Omar Mostafa · Claude Max',
+      accountLabel: isWork ? 'Work account not set up on this PC' : personalLabel(acc),
     }
-  }, [identity, setIdentity])
+  }, [identity, setIdentity, acc])
   return <IdentityContext.Provider value={value}>{children}</IdentityContext.Provider>
 }
 

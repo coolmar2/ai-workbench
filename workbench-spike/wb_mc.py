@@ -829,6 +829,89 @@ def caller_is_loopback(peer, xff):
     return bool(ips) and all(is_loopback(x) for x in ips)
 
 
+# ---------- accounts: which CLIs are installed and signed in on this machine ----------
+# Asked through each CLI's own status command only; token and credential files are never read.
+
+ACCOUNTS_TTL = 30  # seconds; status commands take a moment, the app polls
+_accounts_cache = {"t": 0.0, "data": None}
+_accounts_lock = threading.Lock()
+
+
+def find_cli(name):
+    """The CLI on PATH, or in the usual per-user install folders (the server may predate a PATH change)."""
+    exe = shutil.which(name)
+    if exe:
+        return exe
+    home = os.path.expanduser("~")
+    for c in (os.path.join(home, ".local", "bin", name + ".exe"),
+              os.path.join(os.environ.get("APPDATA", ""), "npm", name + ".cmd")):
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+def _run(argv):
+    """(exit code, stdout) of a short status command; (None, "") if it can't run or hangs.
+    Inherited CLAUDE*/ANTHROPIC* variables are dropped so a server started from inside a claude session
+    reports the CLI's own sign-in, not that session's."""
+    env = {k: v for k, v in os.environ.items() if not k.upper().startswith(("CLAUDE", "ANTHROPIC"))}
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15, env=env,
+                           stdin=subprocess.DEVNULL, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return p.returncode, p.stdout
+    except (OSError, subprocess.SubprocessError):
+        return None, ""
+
+
+def account_claude():
+    exe = find_cli("claude")
+    if not exe:
+        return {"vendor": "claude", "name": "Claude Code", "installed": False, "signed_in": False, "detail": "Not installed"}
+    _, out = _run([exe, "auth", "status"])
+    try:
+        st = json.loads(out)
+    except ValueError:
+        return {"vendor": "claude", "name": "Claude Code", "installed": True, "signed_in": None, "detail": "Could not read sign-in status"}
+    if not st.get("loggedIn"):
+        return {"vendor": "claude", "name": "Claude Code", "installed": True, "signed_in": False, "detail": "Not signed in (run claude once)"}
+    plan = {"max": "Claude Max", "pro": "Claude Pro", "team": "Claude Team", "enterprise": "Claude Enterprise"}.get(
+        str(st.get("subscriptionType") or "").lower(), "")
+    via = "API key" if st.get("authMethod") not in (None, "claude.ai") else "Claude account"
+    return {"vendor": "claude", "name": "Claude Code", "installed": True, "signed_in": True,
+            "detail": " · ".join(x for x in (plan or via, st.get("email") or "") if x),
+            "plan": plan or None, "email": st.get("email") or None, "org": st.get("orgName") or None}
+
+
+def account_codex():
+    exe = find_cli("codex")
+    if not exe:
+        return {"vendor": "codex", "name": "Codex CLI", "installed": False, "signed_in": False, "detail": "Not installed"}
+    code, out = _run([exe, "login", "status"])
+    if code is None:
+        return {"vendor": "codex", "name": "Codex CLI", "installed": True, "signed_in": None, "detail": "Could not read sign-in status"}
+    line = (out.strip().splitlines() or [""])[0][:120]
+    return {"vendor": "codex", "name": "Codex CLI", "installed": True, "signed_in": code == 0,
+            "detail": line if code == 0 and line else "Not signed in (run codex login)"}
+
+
+def account_gemini():
+    exe = find_cli("gemini")
+    if not exe:
+        return {"vendor": "gemini", "name": "Gemini CLI", "installed": False, "signed_in": False, "detail": "Not installed"}
+    # Gemini CLI has no status command; say so rather than guess.
+    return {"vendor": "gemini", "name": "Gemini CLI", "installed": True, "signed_in": None, "detail": "Installed; sign-in not checked"}
+
+
+def accounts():
+    """GET /accounts body: one entry per vendor, cached for ACCOUNTS_TTL seconds."""
+    with _accounts_lock:
+        now = time.time()
+        if _accounts_cache["data"] is None or now - _accounts_cache["t"] > ACCOUNTS_TTL:
+            _accounts_cache["data"] = {"accounts": [account_claude(), account_codex(), account_gemini()], "checked_at": now}
+            _accounts_cache["t"] = now
+        return _accounts_cache["data"]
+
+
 def start_session(folder):
     """Open a new console window running claude (via the wrapper) in folder."""
     p = subprocess.Popen([sys.executable, os.path.join(HERE, "wb_pty_win.py"), "claude"], cwd=folder,
@@ -1129,7 +1212,7 @@ def make_handler(port, hooks, extra_hosts=(), token=None):
                 self.reply(200, PAGE.encode("utf-8"), "text/html")
             elif path == "/state":
                 self.reply(200, live_state(hooks))
-            elif path in ("/workspaces", "/edits", "/activity", "/fs/list", "/fs/read"):
+            elif path in ("/workspaces", "/edits", "/activity", "/fs/list", "/fs/read", "/accounts"):
                 self.api_get(path, qs)
             elif path == "/term":
                 try:
@@ -1157,6 +1240,8 @@ def make_handler(port, hooks, extra_hosts=(), token=None):
                     return self.reply(200, {"workspaces": workspaces(read_events(hooks), mt)})
                 if not caller_is_loopback(self.client_address[0], self.headers.get("X-Forwarded-For")):
                     return self.reply(403, {"error": "loopback only"})
+                if path == "/accounts":
+                    return self.reply(200, accounts())
                 if path == "/edits":
                     try:
                         since = max(0, int(q("since", "0")))

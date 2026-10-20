@@ -2,13 +2,14 @@ import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Check, Circle, ExternalLink, PanelRight, PanelRightClose, SquarePen } from 'lucide-react'
 import { useIdentity } from '../../context/identity'
+import { useAccounts } from '../../live/accounts'
 import { PageActions } from '../../components/shell/PageActions'
 import {
   AgentMark, Badge, Button, Card, Composer, IconButton, PageHeader, Popover, PopoverContent, PopoverTrigger, ScrollArea, StatusDot,
   TranscriptAssistantText, TranscriptToolRow, TranscriptUserBlock, Tooltip, cn,
 } from '../../components/ui'
 import {
-  ACCOUNTS, ACCOUNTS_WORK, CHAT_TITLE, CHAT_WORKSPACE, DECISION_TEXT, LEAD_LABEL, LIVE, LIVE_WORK, MODELS, PLAN, PLAN_WORK,
+  type AgAccount, CHAT_TITLE, CHAT_WORKSPACE, DECISION_TEXT, LEAD_LABEL, LIVE, LIVE_WORK, MODELS, PLAN, PLAN_WORK,
   SESSION_LINK, SUGGESTIONS, TOOL_CALLS, USER_PROMPT,
 } from './data'
 
@@ -32,7 +33,12 @@ export default function AgentPage() {
 
   const plan = isWork ? PLAN_WORK : PLAN
   const live = isWork ? LIVE_WORK : LIVE
-  const accounts = isWork ? ACCOUNTS_WORK : ACCOUNTS
+  const acc = useAccounts()
+  const accounts: AgAccount[] = isWork
+    ? [{ vendor: 'claude', name: 'Claude Code', how: 'Work account not set up on this PC' }]
+    : acc.accounts
+      ? acc.accounts.map((a) => ({ vendor: a.vendor, name: a.name, how: a.signed_in ? `Signed in · ${a.detail}` : a.detail }))
+      : [{ vendor: 'claude', name: 'Accounts', how: acc.offline ? 'wb_mc.py is not answering' : 'Checking…' }]
   const rail = <RailContent plan={plan} live={live} accounts={accounts} />
 
   return (
@@ -267,7 +273,7 @@ function RailSection({ title, count, children }: { title: string; count: number;
   )
 }
 
-function RailContent({ plan, live, accounts }: { plan: typeof PLAN; live: typeof LIVE; accounts: typeof ACCOUNTS }) {
+function RailContent({ plan, live, accounts }: { plan: typeof PLAN; live: typeof LIVE; accounts: AgAccount[] }) {
   const { vendorFor } = useIdentity()
   return (
     <div className="flex flex-col">

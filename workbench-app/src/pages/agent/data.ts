@@ -36,12 +36,7 @@ export const LIVE_WORK: AgLiveRow[] = [
   { vendor: 'claude', model: 'Sonnet 5.5', status: 'done', task: 'Test run finished', depth: 'No helpers' },
 ]
 
-export const ACCOUNTS: AgAccount[] = [
-  { vendor: 'claude', name: 'Claude Code', how: 'Signed in with your account' },
-  { vendor: 'codex', name: 'Codex CLI', how: 'Signed in with your account' },
-  { vendor: 'gemini', name: 'Gemini CLI', how: 'Signed in with your account' },
-]
-export const ACCOUNTS_WORK: AgAccount[] = [{ vendor: 'claude', name: 'Claude Code', how: 'Signed in · Acme Corp, Claude Enterprise' }]
+// Accounts are live (src/live/accounts.ts), not sample data.
 
 export interface ToolCall { name: string; summary: string; output: string }
 export const TOOL_CALLS: ToolCall[] = [
