@@ -37,7 +37,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       // GET-only read endpoints (see design/API_CONTRACT.md). xfwd lets wb_mc refuse /fs and /edits to LAN callers.
-      '^/api/mc/(state|edits|activity|workspaces|fs/list|fs/read|accounts)(\\?.*)?$': {
+      '^/api/mc/(state|edits|activity|workspaces|fs/list|fs/read|accounts|transcript)(\\?.*)?$': {
         xfwd: true,
         // WB_MC_TARGET lets you point at another port (e.g. a dead one to test the sample fallback).
         target: MC_TARGET,

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Check, Circle, ExternalLink, Loader2, PanelRight, PanelRightClose, Play, SearchX, SquarePen, UserX } from 'lucide-react'
 import { useIdentity } from '../../context/identity'
+import { useTranscript } from '../../live/history'
+import { ResumeButton } from '../../components/shell/ResumeButton'
 import { useAccounts } from '../../live/accounts'
 import { sendPrompt } from '../../live/actions'
 import { agentName, modelLabel, sessionTitle, useMissionFeed, vendorOfModel, workspaceName } from '../../live/mission'
@@ -225,10 +227,14 @@ function SessionChat({ session, stale, onBack }: { session: McSession; stale: bo
   const status = toStatus(session.status, session.online)
   const polling = !['ended', 'offline'].includes(status)
   const act = useActivity(session.session_id, 'lead', polling)
-  const rows = useMemo<TranscriptRow[]>(() => liveRows(session, act.items), [session, act.items])
+  // Past sessions have no hook data: their conversation comes from the Claude Code transcript.
+  const tr = useTranscript(session.imported ? session.session_id : null)
+  const rows = useMemo<TranscriptRow[]>(() => (session.imported ? tr.rows : liveRows(session, act.items)), [session, act.items, tr.rows])
 
   const sendPort = session.online && session.port != null ? session.port : null
-  const blocked = !session.online
+  const blocked = session.imported
+    ? 'Past session: press Resume to continue it'
+    : !session.online
     ? 'Session is not running'
     : sendPort == null
       ? 'No terminal wrapper for this session'
@@ -267,6 +273,7 @@ function SessionChat({ session, stale, onBack }: { session: McSession; stale: bo
             actions={
               <>
                 <button type="button" onClick={onBack} className="text-caption text-3 transition-colors-fast hover:text-1">All sessions</button>
+                {session.imported && <ResumeButton session={session} size="sm" />}
                 <Link to={`/mission/session/${session.session_id}`} className="inline-flex items-center gap-1 text-caption text-3 transition-colors-fast hover:text-1">
                   Open in Mission control <ExternalLink className="size-3" />
                 </Link>

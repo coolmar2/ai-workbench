@@ -28,6 +28,8 @@ import { useIdentity } from '../../context/identity'
 import type { McSession, TranscriptRow } from '../../data/types'
 import { useStartSession } from '../../components/shell/StartSession'
 import { sendPrompt } from '../../live/actions'
+import { useTranscript } from '../../live/history'
+import { ResumeButton } from '../../components/shell/ResumeButton'
 import { sessionTitle } from '../../live/mission'
 import { leadModelLabel, liveRows } from '../session/live'
 import { inText, useActivity } from '../session/plan'
@@ -181,10 +183,14 @@ function LiveAiPanel({ root, extra }: { root: string; extra?: ReactNode }) {
   const [inset, setInset] = useState(80)
   const polling = cur ? !['ended', 'offline'].includes(toStatus(cur.status, cur.online)) : false
   const act = useActivity(cur ? cur.session_id : null, 'lead', polling)
-  const rows = useMemo(() => (cur ? liveRows(cur, act.items) : []), [cur, act.items])
+  // Past sessions have no hook data: their conversation comes from the Claude Code transcript.
+  const tr = useTranscript(cur?.imported ? cur.session_id : null)
+  const rows = useMemo(() => (!cur ? [] : cur.imported ? tr.rows : liveRows(cur, act.items)), [cur, act.items, tr.rows])
   const sendPort = cur && cur.online && cur.port != null ? cur.port : null
   const blocked = !cur
     ? 'Start a session in this folder first'
+    : cur.imported
+    ? 'Past session: press Resume to continue it'
     : sendPort == null
       ? cur.online
         ? 'No terminal wrapper is running for this session'
@@ -213,6 +219,7 @@ function LiveAiPanel({ root, extra }: { root: string; extra?: ReactNode }) {
         <AgentMark vendor="claude" size={14} />
         <span className="text-body font-medium text-1">Lead</span>
         <span className="min-w-0 flex-1 truncate text-caption text-3">{cur ? leadModelLabel(cur) : ''}</span>
+        {cur?.imported && <ResumeButton session={cur} size="sm" />}
         {cur && (
           <Button asChild variant="ghost" size="sm">
             <Link to={`/mission/session/${cur.session_id}`}><ExternalLink />Mission control</Link>

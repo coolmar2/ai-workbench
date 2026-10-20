@@ -83,6 +83,14 @@ export interface McSession {
   /** Epoch seconds of the current turn's UserPromptSubmit, or null. */
   turn_started?: number | null
   eta?: McEta | null
+  /** Session title (Claude Code's custom or AI title), when known. */
+  title?: string | null
+  /** A past Claude Code session read from its transcript (not seen by the hooks): no live data, can be resumed. */
+  imported?: boolean
+  /** Imported only: lead model id from the transcript, prompt count, and where it ran ('cli', 'claude-desktop', ...). */
+  model?: string | null
+  prompts?: number
+  entrypoint?: string | null
 }
 
 export interface McState {

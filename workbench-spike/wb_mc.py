@@ -11,6 +11,7 @@ Python 3.13, standard library only.
 import argparse
 import bisect
 import datetime
+import glob
 import json
 import os
 import pathlib
@@ -912,10 +913,202 @@ def accounts():
         return _accounts_cache["data"]
 
 
-def start_session(folder):
-    """Open a new console window running claude (via the wrapper) in folder."""
-    p = subprocess.Popen([sys.executable, os.path.join(HERE, "wb_pty_win.py"), "claude"], cwd=folder,
-                         creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
+# ---------- history: every Claude Code session on this machine, from its own transcripts ----------
+# Claude Code (CLI and desktop app) keeps one JSONL per session in ~/.claude/projects/<folder>/<id>.jsonl.
+# Read-only: this never writes there. Only top-level files (subagent transcripts live in subfolders).
+
+CLAUDE_PROJECTS = os.path.join(os.path.expanduser("~"), ".claude", "projects")
+SID_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+HISTORY_MIN_REPARSE = 30  # seconds; a session being written right now changes on every poll
+# Wrapper tags Claude Code puts around injected context; never shown as the user's words.
+_TAG_RE = re.compile(r"<(system-reminder|command-[a-z-]+|local-command-[a-z-]+|ide_[a-z_]+|user-prompt-submit-hook)>.*?</\1>", re.S)
+_hist_cache = {}  # path -> {"key": (mtime, size), "at": parsed_at, "summary": dict | None}
+_hist_lock = threading.Lock()
+
+
+def _records(path):
+    with open(path, encoding="utf-8", errors="replace") as f:
+        for line in f:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict):
+                yield r
+
+
+def _user_text(msg):
+    """What the person typed in a user message ('' for tool results and injected context)."""
+    c = msg.get("content")
+    if isinstance(c, str):
+        t = c
+    elif isinstance(c, list):
+        t = "\n".join(x.get("text", "") for x in c if isinstance(x, dict) and x.get("type") == "text")
+    else:
+        t = ""
+    return _TAG_RE.sub("", t).strip()
+
+
+def _summarize(path):
+    sid = os.path.splitext(os.path.basename(path))[0]
+    cwd = relocated = first = last = model = entry = None
+    title_custom = title_ai = None
+    first_prompt = last_prompt = ""
+    prompts = 0
+    for r in _records(path):
+        t = r.get("type")
+        ts = r.get("timestamp")
+        if isinstance(ts, str):
+            first = first or ts
+            last = ts
+        if t == "custom-title":
+            title_custom = r.get("customTitle") or title_custom
+        elif t == "ai-title":
+            title_ai = r.get("aiTitle") or title_ai
+        elif t == "relocated":
+            relocated = r.get("relocatedCwd") or relocated
+        elif t == "last-prompt":
+            last_prompt = r.get("lastPrompt") or last_prompt
+        if r.get("isSidechain") or t not in ("user", "assistant"):
+            continue
+        cwd = cwd or r.get("cwd")
+        entry = entry or r.get("entrypoint")
+        m = r.get("message") if isinstance(r.get("message"), dict) else None
+        if not m:
+            continue
+        if t == "user" and not r.get("isMeta"):
+            txt = _user_text(m)
+            if txt:
+                prompts += 1
+                first_prompt = first_prompt or txt
+        elif t == "assistant" and isinstance(m.get("model"), str) and not m["model"].startswith("<"):
+            model = m["model"]
+    folder = relocated or cwd
+    if not folder or prompts == 0:
+        return None
+    return {"session_id": sid, "cwd": folder, "title": trim(title_custom or title_ai or first_prompt, 120),
+            "started": first, "last": last, "prompts": prompts, "model": model, "entrypoint": entry,
+            "last_prompt": trim(_TAG_RE.sub("", last_prompt).strip() or first_prompt, 200)}
+
+
+def history_sessions():
+    """One summary per Claude Code session on this machine, newest first; cached per file."""
+    now = time.time()
+    out = []
+    with _hist_lock:
+        seen = set()
+        for p in glob.glob(os.path.join(CLAUDE_PROJECTS, "*", "*.jsonl")):
+            if not SID_RE.match(os.path.splitext(os.path.basename(p))[0]):
+                continue
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            seen.add(p)
+            key = (st.st_mtime, st.st_size)
+            c = _hist_cache.get(p)
+            if c is None or (c["key"] != key and now - c["at"] >= HISTORY_MIN_REPARSE):
+                try:
+                    c = {"key": key, "at": now, "summary": _summarize(p)}
+                except OSError:
+                    c = {"key": key, "at": now, "summary": None}
+                _hist_cache[p] = c
+            if c["summary"]:
+                out.append(c["summary"])
+        for p in [k for k in _hist_cache if k not in seen]:
+            del _hist_cache[p]
+    return sorted(out, key=lambda s: s["last"] or "", reverse=True)
+
+
+def merge_history(state):
+    """Add past Claude Code sessions to /state as ended sessions (live ones from hooks win, but get the title)."""
+    by_id = {s["session_id"]: s for s in state["sessions"]}
+    for h in history_sessions():
+        s = by_id.get(h["session_id"])
+        if s is not None:
+            s.setdefault("title", h["title"])
+            continue
+        state["sessions"].append({
+            "session_id": h["session_id"], "cwd": h["cwd"], "started": h["started"], "last_event_t": h["last"],
+            "status": "ended", "online": False, "port": None, "last_prompt": h["last_prompt"], "last_reply": "",
+            "current_tool": None, "event_count": 0, "turn_started": None, "agents": [], "model": h["model"],
+            "title": h["title"], "imported": True, "prompts": h["prompts"], "entrypoint": h["entrypoint"],
+        })
+    return state
+
+
+def _clock(ts):
+    """ISO timestamp -> local '3:04 PM' ('' if unreadable)."""
+    try:
+        d = datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00")).astimezone()
+    except ValueError:
+        return ""
+    return d.strftime("%I:%M %p").lstrip("0")
+
+
+def _tool_summary(inp):
+    if not isinstance(inp, dict):
+        return ""
+    for k in ("command", "file_path", "path", "pattern", "url", "query", "description", "prompt", "skill"):
+        v = inp.get(k)
+        if isinstance(v, str) and v.strip():
+            return trim(v.strip().replace("\n", " "), 160)
+    return trim(", ".join(sorted(inp.keys())), 160)
+
+
+def _result_line(content):
+    if isinstance(content, list):
+        content = "\n".join(x.get("text", "") for x in content if isinstance(x, dict) and x.get("type") == "text")
+    for line in str(content or "").splitlines():
+        if line.strip():
+            return trim(line.strip(), 200)
+    return ""
+
+
+def transcript(sid, limit=400):
+    """GET /transcript?session=<id>: the conversation as transcript rows (the app's TranscriptRow shape)."""
+    if not SID_RE.match(sid or ""):
+        raise FsError(400, "bad session id")
+    paths = glob.glob(os.path.join(CLAUDE_PROJECTS, "*", sid + ".jsonl"))
+    if not paths:
+        raise FsError(404, "no transcript for that session")
+    rows, tools = [], {}
+    for r in _records(paths[0]):
+        t = r.get("type")
+        m = r.get("message")
+        if r.get("isSidechain") or not isinstance(m, dict):
+            continue
+        if t == "user":
+            c = m.get("content")
+            if isinstance(c, list):
+                for x in c:
+                    if isinstance(x, dict) and x.get("type") == "tool_result" and x.get("tool_use_id") in tools:
+                        row, err = tools[x["tool_use_id"]], bool(x.get("is_error"))
+                        line = _result_line(x.get("content"))
+                        if line:
+                            row["output"] = [{"text": line, "tone": "error" if err else "muted"}]
+                        row["dot"] = "error" if err else "ok"
+            if not r.get("isMeta"):
+                txt = _user_text(m)
+                if txt:
+                    rows.append({"kind": "user", "time": _clock(r.get("timestamp")), "text": trim(txt, 4000)})
+        elif t == "assistant" and isinstance(m.get("content"), list):
+            for x in m["content"]:
+                if not isinstance(x, dict):
+                    continue
+                if x.get("type") == "text" and str(x.get("text") or "").strip():
+                    rows.append({"kind": "text", "text": trim(x["text"].strip(), 8000)})
+                elif x.get("type") == "tool_use":
+                    row = {"kind": "tool", "name": str(x.get("name") or "tool"), "input": [_tool_summary(x.get("input"))], "dot": "muted"}
+                    tools[x.get("id")] = row
+                    rows.append(row)
+    return {"session_id": sid, "total": len(rows), "rows": rows[-limit:]}
+
+
+def start_session(folder, resume=None):
+    """Open a new console window running claude (via the wrapper) in folder; resume = a past session id."""
+    args = [sys.executable, os.path.join(HERE, "wb_pty_win.py"), "claude"] + (["--resume", resume] if resume else [])
+    p = subprocess.Popen(args, cwd=folder, creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
     return {"ok": True, "pid": p.pid}
 
 
@@ -1211,8 +1404,15 @@ def make_handler(port, hooks, extra_hosts=(), token=None):
             if path == "/":
                 self.reply(200, PAGE.encode("utf-8"), "text/html")
             elif path == "/state":
-                self.reply(200, live_state(hooks))
-            elif path in ("/workspaces", "/edits", "/activity", "/fs/list", "/fs/read", "/accounts"):
+                st = live_state(hooks)
+                # Past sessions carry prompts and folders: only for callers on this machine.
+                if caller_is_loopback(self.client_address[0], self.headers.get("X-Forwarded-For")):
+                    try:
+                        merge_history(st)
+                    except Exception:
+                        pass  # history is extra; never break the live feed
+                self.reply(200, st)
+            elif path in ("/workspaces", "/edits", "/activity", "/fs/list", "/fs/read", "/accounts", "/transcript"):
                 self.api_get(path, qs)
             elif path == "/term":
                 try:
@@ -1242,6 +1442,8 @@ def make_handler(port, hooks, extra_hosts=(), token=None):
                     return self.reply(403, {"error": "loopback only"})
                 if path == "/accounts":
                     return self.reply(200, accounts())
+                if path == "/transcript":
+                    return self.reply(200, transcript(q("session")))
                 if path == "/edits":
                     try:
                         since = max(0, int(q("since", "0")))
@@ -1289,8 +1491,12 @@ def make_handler(port, hooks, extra_hosts=(), token=None):
                 folder = body.get("folder")
                 if not isinstance(folder, str) or not os.path.isabs(folder) or not os.path.isdir(folder):
                     return self.reply(400, {"ok": False, "error": "folder must be an absolute path to an existing directory"})
+                resume = body.get("resume")
+                if resume is not None and (not isinstance(resume, str) or not SID_RE.match(resume)
+                                           or not glob.glob(os.path.join(CLAUDE_PROJECTS, "*", resume + ".jsonl"))):
+                    return self.reply(400, {"ok": False, "error": "resume must be the id of a session on this machine"})
                 try:
-                    return self.reply(200, start_session(os.path.abspath(folder)))
+                    return self.reply(200, start_session(os.path.abspath(folder), resume))
                 except OSError as e:
                     return self.reply(500, {"ok": False, "error": "could not start: %s" % e})
             wport = body.get("port")

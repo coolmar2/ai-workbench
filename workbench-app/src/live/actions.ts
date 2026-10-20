@@ -51,3 +51,8 @@ export function resizeTerm(port: number, cols: number, rows: number): Promise<Ac
 export function startSession(folder: string): Promise<ActionResult> {
   return post('start', { folder })
 }
+
+/** Reopen a past Claude Code session (`claude --resume <id>`) in its folder, in a new console window. */
+export function resumeSession(folder: string, sessionId: string): Promise<ActionResult> {
+  return post('start', { folder, resume: sessionId })
+}

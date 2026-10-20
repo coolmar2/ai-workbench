@@ -34,6 +34,8 @@ import { useIdentity } from '../../context/identity'
 import type { McSession, TranscriptRow, Vendor } from '../../data/types'
 import { sessionTitle, useMissionFeed, workspaceName } from '../../live/mission'
 import { sendKeys, sendPrompt } from '../../live/actions'
+import { useTranscript } from '../../live/history'
+import { ResumeButton } from '../../components/shell/ResumeButton'
 import { AgentCloud } from './Cloud'
 import { AgentPanel, type Tab } from './Panel'
 import {
@@ -121,7 +123,9 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
 
   const sample = sampleSession(id)
   const polling = live ? !['ended', 'offline'].includes(toStatus(live.status, live.online)) : false
-  const leadAct = useActivity(live ? id : null, 'lead', polling)
+  const leadAct = useActivity(live && !live.imported ? id : null, 'lead', polling)
+  // Past sessions have no hook data: their conversation comes from the Claude Code transcript.
+  const transcriptRows = useTranscript(live?.imported ? id : null)
 
   const model = useMemo<Model>(() => {
     if (live) {
@@ -150,14 +154,14 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
   }
 
   const rows = useMemo<TranscriptRow[]>(() => {
-    const base = live ? liveRows(live, leadAct.items) : model.baseRows
+    const base = live ? (live.imported ? transcriptRows.rows : liveRows(live, leadAct.items)) : model.baseRows
     return base.flatMap((r): TranscriptRow[] => {
       if (r.kind !== 'ask') return [r]
       if (ask === 'Apply') return [{ kind: 'text', text: 'Applied: link_batch now has the same no-replace rule as require_dev. Nothing is committed.' }]
       if (ask) return [{ kind: 'text', text: 'Left for now. link_batch keeps its current behaviour until you decide.' }]
       return [r]
     })
-  }, [live, leadAct.items, model.baseRows, ask])
+  }, [live, leadAct.items, transcriptRows.rows, model.baseRows, ask])
 
   const nodeByName = useCallback((name: string) => model.nodes.find((n) => n.name === name), [model.nodes])
   const openAgent = (name: string) => {
@@ -266,6 +270,7 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
         <AgentMark vendor="claude" size={10} />
         <span className="text-claude">{leadModel}</span>
       </span>
+      {live?.imported && <ResumeButton session={live} />}
       {sendPort != null && (
         <Button variant="secondary" size="md" icon={<Pause />} onClick={() => void pause()}>
           Pause
@@ -305,6 +310,8 @@ function SessionBody({ id, initialView, live, stale, sampleMode }: { id: string;
   const agentCount = agentNodes.length
   const sendBlocked = !live
     ? 'Sample session: nothing to send to'
+    : live.imported
+      ? 'Past session: press Resume to continue it'
     : sendPort == null
       ? 'No terminal wrapper is running for this session'
       : sending

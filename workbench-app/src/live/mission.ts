@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { McAgent, McEta, McSession, McState, Vendor } from '../data/types'
 import { mockEtaState } from './mockEta'
+import { parseFeedTime } from '../components/ui/time'
 
 /**
  * Read-only feed from wb_mc.py through the Vite proxy (/api/mc -> 127.0.0.1:47832).
@@ -133,6 +134,8 @@ export function workspaceName(cwd: string): string {
 
 /** A human session name: the last prompt (trimmed) or "<workspace> session". Never "S1". */
 export function sessionTitle(s: McSession): string {
+  const title = (s.title || '').trim().replace(/\s+/g, ' ')
+  if (title) return title.length > 48 ? title.slice(0, 47) + '…' : title
   const p = (s.last_prompt || '').trim().replace(/\s+/g, ' ')
   if (p) return p.length > 48 ? p.slice(0, 47) + '…' : p
   return `${workspaceName(s.cwd) || 'Unknown folder'} session`
@@ -149,7 +152,10 @@ export function isRunning(s: { status: string }): boolean {
 /** Running first, then idle, then by most recent event. */
 export function sortSessions(list: McSession[]): McSession[] {
   const rank = (s: McSession) => (isRunning(s) ? 0 : s.online ? 1 : s.status === 'idle' ? 2 : 3)
-  return [...list].sort((a, b) => rank(a) - rank(b) || (b.last_event_t || '').localeCompare(a.last_event_t || ''))
+  // last_event_t is "HH:MM:SS" (today, from hooks) or a full ISO time (imported sessions): compare as times.
+  const now = Date.now()
+  const at = (s: McSession) => parseFeedTime(s.last_event_t, now) ?? 0
+  return [...list].sort((a, b) => rank(a) - rank(b) || at(b) - at(a))
 }
 
 export interface AgentNode {
