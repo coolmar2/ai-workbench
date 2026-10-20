@@ -9,7 +9,8 @@ Omar (electrical engineer; Windows; Claude Max) wants one personal app for all h
 around the official CLIs (Claude now; Codex/Gemini later), reachable from his phone. Hard rules:
 - **No AI trace in his git history**: agents never branch, commit, push, add worktrees or trailers.
 - Never touch global settings, `~/.claude`, logins or tokens; project-local files only.
-- Vendor marks are the real Claude / Gemini logos, and Codex uses the OpenAI knot in white (changed 2026-10-19 at Omar's request; they were
+- Vendor marks are the real logos: Claude in its coral, Codex as the OpenAI knot in dark blue (#1D4ED8),
+  Gemini as its star in solid teal (#14B8A6) (changed 2026-10-19 at Omar's request; they were
   circle/square/triangle stand-ins before). SVGs live in `workbench-app/src/assets/vendors/` (from LobeHub's
   MIT icon set) and are drawn only through `AgentMark`.
 - His working style (from his global CLAUDE.md): cheap models write (Sonnet/Haiku subagents, tight
