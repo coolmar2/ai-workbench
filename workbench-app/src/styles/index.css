@@ -1,0 +1,157 @@
+@import 'tailwindcss';
+@import './tokens.css';
+@import './base.css';
+
+/* Remove Tailwind's default palette, font sizes and shadows: only our tokens exist as classes. */
+@theme {
+  --color-*: initial;
+  --text-*: initial;
+  --shadow-*: initial;
+}
+
+/* Tokens -> Tailwind classes (bg-card, text-2, border-stroke-3, rounded-md, font-mono, shadow-float...). */
+@theme inline {
+  /* surfaces: bg-sidebar, bg-chrome, bg-card, bg-elevated */
+  --color-sidebar: var(--bg-sidebar);
+  --color-chrome: var(--bg-chrome);
+  --color-card: var(--bg-card);
+  --color-elevated: var(--bg-elevated);
+
+  /* text colours: text-1 .. text-4 */
+  --text-color-1: var(--text-1);
+  --text-color-2: var(--text-2);
+  --text-color-3: var(--text-3);
+  --text-color-4: var(--text-4);
+
+  /* strokes: border-stroke-1 .. 4 (also divide-stroke-*, ring-stroke-*) */
+  --color-stroke-1: var(--stroke-1);
+  --color-stroke-2: var(--stroke-2);
+  --color-stroke-3: var(--stroke-3);
+  --color-stroke-4: var(--stroke-4);
+
+  /* fills: bg-fill-1 .. 4 */
+  --color-fill-1: var(--fill-1);
+  --color-fill-2: var(--fill-2);
+  --color-fill-3: var(--fill-3);
+  --color-fill-4: var(--fill-4);
+
+  /* brand + status: text-claude, bg-running, bg-danger/12 (tints max 12%) ... */
+  --color-claude: var(--claude);
+  --color-codex: var(--codex);
+  --color-gemini: var(--gemini);
+  --color-running: var(--running);
+  --color-coordinator: var(--coordinator);
+  --color-personal: var(--personal);
+  --color-work: var(--work);
+  --color-danger: var(--danger);
+  --color-attention: var(--attention);
+  --color-success: var(--success);
+  --color-info: var(--info);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-ring: var(--ring);
+  --color-ink: var(--base);
+  --color-black: #000;
+
+  /* type scale: text-hero, text-title, text-body, text-caption, text-meta, text-code */
+  --text-hero: 20px;
+  --text-hero--line-height: 28px;
+  --text-title: 15px;
+  --text-title--line-height: 20px;
+  --text-body: 13px;
+  --text-body--line-height: 18px;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+  --text-meta: 11px;
+  --text-meta--line-height: 14px;
+  --text-code: 12px;
+  --text-code--line-height: 18px;
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --tracking-caps: 0.06em;
+
+  /* radii: rounded-sm 4, rounded-md 6, rounded-lg 8, rounded-composer 12 */
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-composer: var(--radius-composer);
+
+  /* elevation: shadow-float (menus, popovers, dialogs), shadow-input (inputs) */
+  --shadow-float: var(--shadow-float);
+  --shadow-input: var(--shadow-input);
+  --shadow-focus: var(--shadow-focus);
+
+  --ease-out: var(--ease-out);
+
+  /* animate-pulse-soft (running dot), animate-shimmer (skeleton), animate-pop-in (menus), animate-fade-in */
+  --animate-pulse-soft: pulse-soft 1.6s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.4s linear infinite;
+  --animate-pop-in: pop-in 160ms var(--ease-out);
+  --animate-fade-in: fade-in 180ms var(--ease-out);
+  --animate-overlay-in: fade-in 160ms var(--ease-out);
+  --animate-fade-out: fade-out 100ms ease-out forwards;
+  --animate-drawer-in: drawer-in 160ms var(--ease-out);
+  --animate-drawer-in-right: drawer-in-right 160ms var(--ease-out);
+
+  @keyframes pulse-soft {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--running) 45%, transparent); }
+    50% { opacity: 0.55; box-shadow: 0 0 0 3px color-mix(in srgb, var(--running) 0%, transparent); }
+  }
+  @keyframes shimmer {
+    from { background-position: 150% 0; }
+    to { background-position: -50% 0; }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes drawer-in {
+    from { opacity: 0; transform: translateX(-8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes drawer-in-right {
+    from { opacity: 0; transform: translateX(8px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  @keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}
+
+/* Transition presets: never `transition-all`. */
+@utility transition-colors-fast {
+  transition-property: color, background-color, border-color, box-shadow, opacity;
+  transition-duration: var(--dur-fast);
+  transition-timing-function: ease-out;
+}
+
+/* Scroll-fade masks, driven by data-fade-top/bottom/left/right (see ui/ScrollArea). */
+@utility fade-mask {
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  --fade-left: 0px;
+  --fade-right: 0px;
+  mask-image:
+    linear-gradient(to bottom, transparent 0, #000 var(--fade-top), #000 calc(100% - var(--fade-bottom)), transparent 100%),
+    linear-gradient(to right, transparent 0, #000 var(--fade-left), #000 calc(100% - var(--fade-right)), transparent 100%);
+  mask-composite: intersect;
+  &[data-fade-top] { --fade-top: 20px; }
+  &[data-fade-bottom] { --fade-bottom: 20px; }
+  &[data-fade-left] { --fade-left: 20px; }
+  &[data-fade-right] { --fade-right: 20px; }
+}
+
+@utility caps {
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}

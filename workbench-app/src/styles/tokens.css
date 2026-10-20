@@ -1,0 +1,86 @@
+/*
+ * Design tokens: the single source of truth (POLISH_SPEC.md, Hermes alpha-ladder approach).
+ * One ink colour (--base); text, strokes and fills are alpha steps of it, so they work on any surface.
+ * Exposed to Tailwind in index.css (`@theme inline`). Components never use raw hex values.
+ */
+:root {
+  color-scheme: dark;
+
+  /* ink */
+  --base: #f4f4f5;
+
+  /* surfaces */
+  --bg-sidebar: #0a0a0b;
+  --bg-chrome: #0d0d0e;
+  --bg-card: #161618;
+  --bg-elevated: #1b1b1e;
+
+  /* text: 94 / 74 / 54 / 36 % */
+  --text-1: color-mix(in srgb, var(--base) 94%, transparent);
+  --text-2: color-mix(in srgb, var(--base) 74%, transparent);
+  --text-3: color-mix(in srgb, var(--base) 54%, transparent);
+  --text-4: color-mix(in srgb, var(--base) 36%, transparent);
+
+  /* strokes (hairlines): 10 / 7 / 5 / 3 %. stroke-3 is the default hairline, stroke-2 panel edges */
+  --stroke-1: color-mix(in srgb, var(--base) 10%, transparent);
+  --stroke-2: color-mix(in srgb, var(--base) 7%, transparent);
+  --stroke-3: color-mix(in srgb, var(--base) 5%, transparent);
+  --stroke-4: color-mix(in srgb, var(--base) 3%, transparent);
+
+  /* fills: 10 / 7 / 5 / 3 %. fill-3 = row hover, fill-2 = selected / pressed, fill-1 = strong */
+  --fill-1: color-mix(in srgb, var(--base) 10%, transparent);
+  --fill-2: color-mix(in srgb, var(--base) 7%, transparent);
+  --fill-3: color-mix(in srgb, var(--base) 5%, transparent);
+  --fill-4: color-mix(in srgb, var(--base) 3%, transparent);
+
+  /* brand + status (marks, dots, small accents only; tints max 12%) */
+  --claude: #e08a62;
+  --codex: #4ec9a0;
+  --gemini: #6aa5ff;
+  --running: #e7b84a;
+  --coordinator: #c9a0ff;
+  --personal: #6fcf8e;
+  --work: #d9b44a;
+  --danger: #e75e78;
+  --attention: #db704b; /* "needs you" */
+  --success: #55a583;   /* done / signed in */
+  --info: #6aa5ff;
+
+  --accent: var(--claude);
+  --on-accent: #1a0f0a; /* text on the one primary button */
+  --ring: color-mix(in srgb, var(--accent) 70%, transparent);
+  --selection: color-mix(in srgb, var(--accent) 28%, transparent);
+
+  /* radii */
+  --radius-sm: 4px;      /* icon buttons, badges, kbd */
+  --radius-md: 6px;      /* buttons, inputs, menu items */
+  --radius-lg: 8px;      /* cards, menus, dialogs */
+  --radius-composer: 12px;
+
+  /* type */
+  --font-sans: 'Inter Variable', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'Cascadia Code', ui-monospace, monospace;
+
+  /* layout */
+  --sidebar-w: 237px;
+  --rail-w: 48px;
+  --topstrip-h: 40px;
+  --row-h: 28px;
+  --tree-row-h: 22px;
+
+  /* elevation */
+  --shadow-float:
+    0 0 0 1px var(--stroke-1),
+    0 8px 24px rgb(0 0 0 / 0.45),
+    0 2px 6px rgb(0 0 0 / 0.3),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+  --shadow-input: inset 0 1px 1px rgb(0 0 0 / 0.38);
+  /* the one focus-ring style: outline for buttons/rows (base.css), this inset ring for fields */
+  --shadow-focus: var(--shadow-input), inset 0 0 0 1px var(--ring);
+
+  /* motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-fast: 100ms;
+  --dur-med: 160ms;
+  --dur-slow: 180ms;
+}

@@ -1,0 +1,103 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "python C:/Users/coolm/Documents/Claude/ai-workbench/workbench-spike/wb_hook.py SessionStart",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "command": "python C:/Users/coolm/Documents/Claude/ai-workbench/workbench-spike/wb_hook.py UserPromptSubmit",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python C:/Users/coolm/Documents/Claude/ai-workbench/workbench-spike/wb_hook.py PreToolUse",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "python C:/Users/coolm/Documents/Claude/ai-workbench/workbench-spike/wb_hook.py PostToolUse",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "command": "python C:/Users/coolm/Documents/Claude/ai-workbench/workbench-spike/wb_hook.py SubagentStart",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "command": "python C:/Users/coolm/Documents/Claude/ai-workbench/workbench-spike/wb_hook.py SubagentStop",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          {
+            "command": "python C:/Users/coolm/Documents/Claude/ai-workbench/workbench-spike/wb_hook.py Notification",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "python C:/Users/coolm/Documents/Claude/ai-workbench/workbench-spike/wb_hook.py Stop",
+            "type": "command"
+          }
+        ],
+        "matcher": "*"
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python C:/Users/coolm/Documents/Claude/ai-workbench/workbench-spike/wb_hook.py SessionEnd"
+          }
+        ]
+      }
+    ]
+  }
+}

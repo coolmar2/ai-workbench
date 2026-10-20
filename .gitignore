@@ -1,0 +1,29 @@
+# Dependencies and build output
+node_modules/
+dist/
+__pycache__/
+*.pyc
+
+# Runtime data (session history, logs, private agent copies, phone-access token)
+hooks*.jsonl
+logs/
+rc-home/
+wb_mc.token
+
+# Private notes and design boards; kept on this PC only
+ai-workbench-brain-dump/
+
+# Throwaway test repo for wb_copy; recreate it as its own git repo when needed
+wb-test-repo/
+
+# Machine-specific launch config for the desktop app preview
+/.claude/launch.json
+
+# Secrets (none today; keep it that way)
+.env
+.env.*
+
+# Screenshots taken before the sample data was renamed; kept on this PC only
+workbench-app/design/screens/
+workbench-app/design/target/
+workbench-app/screenshots/
